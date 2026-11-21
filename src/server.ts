@@ -12,11 +12,34 @@ const relativePath = z.string().min(1).max(1024);
 const paging = { cursor: z.string().max(1024).optional(), limit: z.number().int().min(1).max(LIMITS.pageSize).optional() };
 const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 
+export function serverInstructions(writeToolsEnabled: boolean): string {
+  if (!writeToolsEnabled) {
+    return [
+      'webgal-mcp 当前为只读模式（仅开放只读工具）。',
+      '- 排查连接、工程文件或 Terre 映射时先调用 webgal_status；不要臆测未读取的场景、配置或素材内容。',
+      '- 读取结果为磁盘上已保存内容，不代表 WebGAL Terre 中未保存的编辑器缓冲。',
+      '- scene_validate、project_scan、live2d_model_inspect 仅为静态检查，不运行游戏、不访问外部 URL，动态引用需由用户在 Terre 预览确认。',
+      '- 如需受控写入，须在 MCP 启动参数中配置位于所有工程和素材目录之外的 --state-root 并重启连接。',
+    ].join('\n');
+  }
+  return [
+    'webgal-mcp 已启用受控写入，所有写入必须严格遵守人工交接流程：',
+    '1. 排查连接与映射先调用 webgal_status；不要臆测未读取的内容，磁盘读取不代表 Terre 未保存缓冲。',
+    '2. 修改或导入前，先用 change_plan 或 live2d_import_plan（不传 sessionId）生成只读草案给用户审阅。',
+    '3. 真正写入前，必须等待用户明确回复确认已在 WebGAL Terre 中成功保存并关闭该工程的全部编辑页；随后用用户本次原话调用 write_session_begin，绝不伪造、推断或复用旧回复。',
+    '4. 交接后重新生成可应用计划并让用户再次确认；记录 planId 后调用 change_apply，完成后调用 write_session_end 交回编辑权。',
+    '5. 遇到冲突、failed、partial、uncertain 或回执丢失时，禁止自动重试覆盖，必须先调用 recovery_inspect 核对磁盘与批次状态。',
+  ].join('\n');
+}
+
 export function createServer(config: AppConfig, options: WriteToolOptions = {}) {
   config = structuredClone(config);
-  const server = new McpServer({ name: 'webgal-mcp', version: '0.3.0' });
-  const service = new ReadService(config);
   const writeToolsEnabled = Boolean(options.stateRoot);
+  const server = new McpServer(
+    { name: 'webgal-mcp', version: '0.3.0' },
+    { instructions: serverInstructions(writeToolsEnabled) },
+  );
+  const service = new ReadService(config);
   async function result(operation: () => unknown | Promise<unknown>) {
     try {
       const data = await operation();

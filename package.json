@@ -7,7 +7,7 @@
   "description": "Local MCP server for existing WebGAL and Terre projects",
   "engines": { "node": ">=24.0.0 <25" },
   "bin": { "webgal-mcp": "dist/cli.js" },
-  "files": ["dist", "README.md", "docs/tool-reference.md"],
+  "files": ["dist", "README.md", "docs/tool-reference.md", "docs/deepseek-harness.md"],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "check": "tsc -p tsconfig.json --noEmit",

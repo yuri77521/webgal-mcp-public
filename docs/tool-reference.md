@@ -67,6 +67,8 @@ args = ["<absolute-repository-path>/dist/cli.js", "--config", "<absolute-local-c
 
 CLI 通过 stdio（标准输入输出）与客户端通信。直接在终端启动会等待 MCP 消息。若 Codex 找不到 `node`，可使用 Node.js 可执行文件的绝对路径。客户端仍按自身配置处理工具审批。
 
+若通过 DeepSeek Harness（`dsh`）接入，请参见 [DeepSeek Harness 接入指南](deepseek-harness.md)（含 `Settings → MCP` 与 `cordis.patch.yml` 配置、`mcp__webgal__*` 工具命名及专属排查）。
+
 ## 读取工具
 
 | 工具 | 用途 |

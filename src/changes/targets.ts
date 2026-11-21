@@ -775,11 +775,41 @@ function modelDirectoryStagingRelative(relative: string, batchId: string, index:
   return path.posix.join(parentRelative(relative), name);
 }
 
-function directoryPublisher(): string {
+function envValueCaseInsensitive(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  const lower = name.toLowerCase();
+  for (const [key, value] of Object.entries(env)) {
+    if (key.toLowerCase() === lower && value !== undefined && value.trim() !== '') {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+export function directoryPublisherEnv(
+  baseEnv: NodeJS.ProcessEnv,
+  staged: string,
+  target: string,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...baseEnv };
+  if (!envValueCaseInsensitive(env, 'ProgramFiles')) {
+    env.ProgramFiles = envValueCaseInsensitive(env, 'ProgramW6432') ?? 'C:\\Program Files';
+  }
+  if (!envValueCaseInsensitive(env, 'SystemRoot')) {
+    env.SystemRoot = envValueCaseInsensitive(env, 'WINDIR') ?? 'C:\\Windows';
+  }
+  env.WGMCP_DIRECTORY_STAGE = staged;
+  env.WGMCP_DIRECTORY_TARGET = target;
+  return env;
+}
+
+function directoryPublisher(env: NodeJS.ProcessEnv = process.env): string {
   if (process.platform !== 'win32') {
     fail('CREATE_ONLY_UNSUPPORTED', 'Publishing a model directory requires Windows and PowerShell 7.');
   }
-  return path.join(process.env.ProgramFiles ?? 'C:\\Program Files', 'PowerShell', '7', 'pwsh.exe');
+  const programFiles = envValueCaseInsensitive(env, 'ProgramFiles')
+    ?? envValueCaseInsensitive(env, 'ProgramW6432')
+    ?? 'C:\\Program Files';
+  return path.join(programFiles, 'PowerShell', '7', 'pwsh.exe');
 }
 
 async function publishModelDirectory(
@@ -794,7 +824,7 @@ async function publishModelDirectory(
       '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
       '$ErrorActionPreference = "Stop"; [System.IO.Directory]::Move($env:WGMCP_DIRECTORY_STAGE, $env:WGMCP_DIRECTORY_TARGET)',
     ], {
-      env: { ...process.env, WGMCP_DIRECTORY_STAGE: staged, WGMCP_DIRECTORY_TARGET: context.target },
+      env: directoryPublisherEnv(process.env, staged, context.target),
       windowsHide: true,
       timeout: 30_000,
     });
