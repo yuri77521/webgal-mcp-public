@@ -26,8 +26,6 @@ const ASSET_DIRECTORIES = new Set([
   'vocal',
   'video'
 ]);
-const STREAMED_ASSET_DIRECTORIES = new Set(['background', 'bgm']);
-const STREAMED_REVISION_MAX_BYTES = 16 * 1024 * 1024;
 
 interface WritePolicy {
   create: boolean;
@@ -161,18 +159,19 @@ function normalizeRevision(expectedRevision: string | null): string | null {
   return expectedRevision.toLowerCase();
 }
 
+// Callers validate the complete write path first. Figure JSON may be a custom Live2D entry.
+export function supportsOrdinaryAssetStreaming(relative: string): boolean {
+  const [root, kind] = relative.split('/');
+  return root === 'game' && kind !== undefined && ASSET_DIRECTORIES.has(kind)
+    && !(kind === 'figure' && relative.toLowerCase().endsWith('.json'));
+}
+
 function streamedAssetPath(relative: string, modelDirectory?: string): string {
   const validated = assertWritePath(relative, true);
-  if (modelDirectory !== undefined && validated.startsWith(`${checkedModelDirectory(modelDirectory)}/`)) {
-    return validated;
-  }
-  const match = /^game\/([^/]+)\/(.+)$/.exec(validated);
-  if (!match || !STREAMED_ASSET_DIRECTORIES.has(match[1] as string)) {
-    fail(
-      'PATH_INVALID',
-      'Streamed assets are supported only under game/background and game/bgm.'
-    );
-  }
+  const allowed = modelDirectory === undefined
+    ? supportsOrdinaryAssetStreaming(validated)
+    : validated.startsWith(`${checkedModelDirectory(modelDirectory)}/`);
+  if (!allowed) fail('PATH_INVALID', 'The target is outside the supported streamed asset paths.');
   return validated;
 }
 
@@ -1013,7 +1012,7 @@ export async function streamedTargetRevision(
     snapshot = await hashRegularFile(
       context.canonicalRoot,
       context.target,
-      STREAMED_REVISION_MAX_BYTES,
+      LARGE_ASSET_LIMITS.maxFileBytes,
       'FILE_NOT_FOUND'
     );
   } catch (error) {

@@ -169,6 +169,14 @@ it('blocks an occupied destination, conflicting names, and unsafe extras', async
   expect((await draft(['script.js'])).blockingIssues).toContainEqual({ code: 'INVALID_ARGUMENT' });
 });
 
+it('accepts a 1 MiB model entry and blocks an entry one byte larger', async () => {
+  const paddedEntry = model().padEnd(1024 * 1024, ' ');
+  await put(source, entry, paddedEntry);
+  expect((await draft()).blockingIssues).toEqual([]);
+  await put(source, entry, paddedEntry + ' ');
+  expect((await draft()).blockingIssues).toContainEqual(expect.objectContaining({ code: 'FILE_TOO_LARGE' }));
+});
+
 it('uses file, total, and count limits for the complete package', async () => {
   const over = await put(source, 'hero/extra.png');
   await truncate(over, LARGE_ASSET_LIMITS.maxFileBytes + 1);
@@ -176,10 +184,11 @@ it('uses file, total, and count limits for the complete package', async () => {
   await truncate(over, LARGE_ASSET_LIMITS.maxFileBytes);
   expect((await draft(['extra.png'])).blockingIssues).toEqual([]);
   const other = await put(source, 'hero/other.png');
-  await truncate(other, LARGE_ASSET_LIMITS.maxFileBytes);
-  expect((await draft(['extra.png', 'other.png'])).blockingIssues).toContainEqual(expect.objectContaining({ code: 'LIMIT_EXCEEDED' }));
   const base = await draft();
-  await truncate(other, LARGE_ASSET_LIMITS.maxFileBytes - base.totalBytes);
+  const remainingBytes = LARGE_ASSET_LIMITS.maxBatchBytes - LARGE_ASSET_LIMITS.maxFileBytes - base.totalBytes;
+  await truncate(other, remainingBytes + 1);
+  expect((await draft(['extra.png', 'other.png'])).blockingIssues).toContainEqual(expect.objectContaining({ code: 'LIMIT_EXCEEDED' }));
+  await truncate(other, remainingBytes);
   expect(await draft(['extra.png', 'other.png'])).toMatchObject({
     totalBytes: LARGE_ASSET_LIMITS.maxBatchBytes, blockingIssues: [],
   });

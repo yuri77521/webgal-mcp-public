@@ -45,7 +45,7 @@ The two hashes serve different purposes. `verifiedRevision` tracks the latest ch
 Before each `change_plan`, check the proposed operations against the connected MCP version's tool contract. Do this for drafts and formal plans, reusing the preflight where inputs are unchanged.
 
 - Count operations and exact target paths. Check that create-only targets are absent, target parents and kinds are supported, and proposed source files match their reviewed revisions. Measure actual file sizes and projected scene/config bytes in the target encoding, including unchanged text and any BOM. Track buffered and streamed totals separately.
-- For webgal-mcp 0.3.0, a normal batch allows 1–32 operations. Buffered outputs allow 1 MiB per file and 4 MiB per batch. Background and BGM imports above 1 MiB stream, with 16 MiB per file and 32 MiB per batch in that separate budget. Other ordinary imports stay within the buffered limit.
+- A normal batch allows 1–32 operations. Backgrounds, figures, BGM, voices and videos above 1 MiB stream, up to 100 MiB per file and 128 MiB per batch. Smaller assets, scenes and config share the separate 4 MiB buffered budget, with a 1 MiB limit per file. Ordinary figure JSON and Live2D entry JSON also have a 1 MiB file limit.
 - Verify image/audio formats against both import and playback support. Use an authorized compatible derivative or a disclosed, approved fallback where available. Route writes through the MCP coordinator.
 - If a batch exceeds a limit, partition it before calling `change_plan`. Keep related items together when they fit. If a scene needs assets from an earlier batch, verify they were applied and read back before planning that dependent scene. Report blocked items and their affected cues before handoff.
 

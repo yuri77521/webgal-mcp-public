@@ -92,7 +92,7 @@ export function registerWriteTools(server: McpServer, config: AppConfig, options
     return outcome;
   }));
   server.registerTool('live2d_import_plan', {
-    description: 'Draft a complete Live2D bundle, or a curated first/incremental import using selected motion members, registered or unregistered expressions, and only their dependencies. Curated game copies rename dot-prefixed path segments to underscore-prefixed names, rewrite all manifest references, and return gameEntry with before/after revisions and motion, expression, and resource changes. Large packages are split by the 32-file and 32 MiB limits; dependencies publish before the final manifest batch. After user handoff, pass sessionId and the reviewed bundleRevision to create a plan for change_apply.',
+    description: 'Draft a complete Live2D bundle, or a curated first/incremental import using selected motion members, registered or unregistered expressions, and only their dependencies. Curated game copies rename dot-prefixed path segments to underscore-prefixed names, rewrite all manifest references, and return gameEntry with before/after revisions and motion, expression, and resource changes. Each batch allows 32 files and 128 MiB, with up to 100 MiB per resource and 1 MiB per entry JSON. Curated imports publish dependencies before the final manifest batch. After user handoff, pass sessionId and the reviewed bundleRevision to create a plan for change_apply.',
     inputSchema: z.object({
       projectId: id, sourceId: id, modelPath: relative,
       targetDirectory: z.string().min(1).max(255).describe('One directory name under game/figure. Curated mode can update an existing model directory.'),

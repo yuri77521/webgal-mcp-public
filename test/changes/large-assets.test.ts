@@ -8,6 +8,7 @@ import {
   realpath,
   rm,
   stat,
+  truncate,
   writeFile
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -248,7 +249,7 @@ describe('v2 large asset imports', () => {
     return {
       type: 'import_asset',
       kind,
-      path: target.replace(/^game\/(?:background|bgm|figure)\//, ''),
+      path: path.posix.relative(`game/${kind}`, target),
       sourceId,
       sourcePath,
       expectedSourceRevision: description.revision
@@ -404,6 +405,48 @@ describe('v2 large asset imports', () => {
     expect(await readFile(targetPath(projectRoot, bgmTarget))).toEqual(bgmBytes);
   });
 
+  it('publishes and verifies a 100 MiB video in a 128 MiB batch with a figure and voice', async () => {
+    const mib = 1024 * 1024;
+    const { coordinator, service } = await createService();
+    const assets = [
+      { kind: 'video', file: 'intro.mp4', size: 100 * mib },
+      { kind: 'figure', file: 'hero.png', size: 25 * mib },
+      { kind: 'vocal', file: 'voice.ogg', size: 3 * mib }
+    ] as const;
+    const operations: Extract<BusinessOperation, { type: 'import_asset' }>[] = [];
+    const paths = assets.map(({ kind, file }) => `game/${kind}/${file}`);
+    for (const { kind, file, size } of assets) {
+      await mkdir(path.join(projectRoot, 'game', kind), { recursive: true });
+      const source = targetPath(sourceRoot, file);
+      await writeFile(source, file);
+      if (kind === 'video') {
+        await truncate(source, size + 1);
+        await expectAppError(inspectSource(config, sourceId, file), 'FILE_TOO_LARGE');
+      }
+      await truncate(source, size);
+      const { revision } = await inspectSource(config, sourceId, file);
+      operations.push({ type: 'import_asset', kind, path: file, sourcePath: file, sourceId, expectedSourceRevision: revision });
+    }
+
+    const voice = targetPath(sourceRoot, 'voice.ogg');
+    await truncate(voice, 3 * mib + 1);
+    const biggerVoice = { ...operations[2]!, expectedSourceRevision: (await inspectSource(config, sourceId, 'voice.ogg')).revision };
+    await expectAppError(service.plan(projectId, undefined, [...operations.slice(0, 2), biggerVoice]), 'LIMIT_EXCEEDED');
+    await truncate(voice, 3 * mib);
+
+    const session = beginSession(coordinator, paths);
+    const plan = await service.plan(projectId, session.id, operations);
+    const applied = await service.apply(session.id, plan.planId!, 'binary-size-boundaries');
+    expect(applied.status).toBe('complete');
+    const inspected = await coordinator.inspect(projectId, applied.batchId);
+    for (const [index, target] of paths.entries()) {
+      expect((await stat(targetPath(projectRoot, target))).size).toBe(assets[index]!.size);
+      expect(inspected.operations).toContainEqual(expect.objectContaining({
+        path: target, currentRevision: operations[index]!.expectedSourceRevision, diskState: 'planned'
+      }));
+    }
+  }, 60_000);
+
   it('rejects target reuse and bypass attempts before any large target is written', async () => {
     const bytes = await writeLargeSource(backgroundSource, 0x63);
     const operation = await importOperation(
@@ -430,7 +473,7 @@ describe('v2 large asset imports', () => {
 
     const figureOperation = await importOperation(
       'figure',
-      'game/figure/大图 旁路.bin',
+      'game/figure/custom-model.JSON',
       backgroundSource
     );
     await expectAppError(
@@ -454,7 +497,7 @@ describe('v2 large asset imports', () => {
       sourceId,
       backgroundSource
     );
-    const streamedFigureTarget = 'game/figure/streamed 旁路.bin';
+    const streamedFigureTarget = 'game/figure/hero.model3.json';
     const streamedSession = beginSession(coordinator, [streamedFigureTarget]);
     await expectAppError(
       coordinator.plan(ownerId, streamedSession.id, projectId, [{
@@ -473,7 +516,7 @@ describe('v2 large asset imports', () => {
 
     expect(await readFile(targetPath(projectRoot, backgroundTarget)))
       .toEqual(existingBytes);
-    expect(await pathExists(targetPath(projectRoot, 'game/figure/大图 旁路.bin')))
+    expect(await pathExists(targetPath(projectRoot, 'game/figure/custom-model.JSON')))
       .toBe(false);
     expect(await pathExists(targetPath(projectRoot, inlineTarget))).toBe(false);
     expect(await pathExists(targetPath(projectRoot, streamedFigureTarget)))

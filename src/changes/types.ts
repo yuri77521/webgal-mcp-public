@@ -1,5 +1,5 @@
 export const WRITE_LIMITS = Object.freeze({ maxFiles: 32, maxFileBytes: 1024 * 1024, maxBatchBytes: 4 * 1024 * 1024, maxRecordBytes: 8 * 1024 * 1024, sessionTtlMs: 300000, maxSessionTtlMs: 900000 });
-export const LARGE_ASSET_LIMITS = Object.freeze({ maxFileBytes: 16 * 1024 * 1024, maxBatchBytes: 32 * 1024 * 1024, chunkBytes: 64 * 1024 });
+export const LARGE_ASSET_LIMITS = Object.freeze({ maxFileBytes: 100 * 1024 * 1024, maxBatchBytes: 128 * 1024 * 1024, chunkBytes: 64 * 1024 });
 export interface Attestation { source: 'user-message'; statement: string }
 export interface WriteSession { id: string; ownerId: string; projectId: string; paths: string[]; createdAt: number; expiresAt: number; state: 'active' | 'paused' | 'closed'; attestation: Readonly<Attestation>; userAttested: true; automaticDirtyCheck: false }
 export interface ChangeInput { path: string; expectedRevision: string | null; bytes: Uint8Array }
