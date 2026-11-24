@@ -4,7 +4,7 @@
 
 接入后沿用与 Codex CLI 相同的全部安全边界：
 
-- **默认只读。** 不传 `--state-root` 时仅开放 11 个只读工具。
+- **默认只读。** 不传 `--state-root` 时仅开放 13 个只读工具。
 - **受控写入必须人工交接。** 配置 `--state-root` 后，每批修改仍须先审阅草案、由用户在 WebGAL Terre 中保存并关闭该工程的全部编辑页、再明确交接与确认应用；`dsh` 的工具审批弹窗不能替代人工保存与关页交接。
 - **所有路径使用绝对路径。** 为避免 `dsh` 的工作目录（`cwd`）或会话目录切换引起路径漂移，`--config` 与 `--state-root` 均须填写绝对路径。
 
@@ -89,7 +89,7 @@ $repo = (Get-Location).Path.Replace('\', '/')
 
 ## 工具命名与服务端 `instructions`
 
-- **工具命名空间：** 配置 `serverName: webgal` 后，`dsh-mcp-client` 会把全部工具注册为 `mcp__webgal__<tool>`（例如 `mcp__webgal__webgal_status`、`mcp__webgal__scene_read`、`mcp__webgal__change_plan`）。`webgal-mcp` 的 21 个工具名仅包含小写字母、数字和下划线，加前缀后最长 34 个字符。
+- **工具命名空间：** 配置 `serverName: webgal` 后，`dsh-mcp-client` 会把全部工具注册为 `mcp__webgal__<tool>`（例如 `mcp__webgal__webgal_status`、`mcp__webgal__scene_read`、`mcp__webgal__change_plan`）。`webgal-mcp` 的 23 个工具名仅包含小写字母、数字和下划线。
 - **提示词写法：** 日常对话可直接写短名（如 `webgal_status`）。如果同时接了多个 MCP 服务或模型认错工具，直接写完整名称（如 `mcp__webgal__webgal_status`）。
 - **服务端 `instructions`：** `webgal-mcp` 会在 MCP 握手阶段返回分模式（只读 / 写入）的精简 `instructions`（UTF-8 字节数不超过 2 KiB，远低于 `dsh-mcp-client` 默认 32,768 B 上限），`dsh` 会将其自动加入系统提示词，提醒模型先查 `webgal_status`、不臆测未读内容、写入前先出草案并等待人工保存关页交接、失败先调 `recovery_inspect`。
 
@@ -130,6 +130,8 @@ $repo = (Get-Location).Path.Replace('\', '/')
 用 scene_validate 检查候选文本，再用 change_plan 给我看只读草案，等我确认。
 ```
 
+验收跨对话选材时，在独立的测试工作区完成一次 Creator 选材并保存场景，再开一个只调用 Editor 的新对话。给它场景和台词，例如「爱音说完这句后眨眼，沿用当前服装」。检查它是否从保存场景和项目选材记录找回同一模型、只选择表情，并在正确的对白间隙保持站位。播放确认须使用配好对应 Live2D 运行库的临时 Terre 工程。
+
 ## DeepSeek Harness 专属排查表
 
 通用连接、Terre 映射、版本冲突与恢复排查见 [连接与试改排查](tool-reference.md#连接与试改排查)。以下为 `dsh` 特有现象：
@@ -153,7 +155,7 @@ $repo = (Get-Location).Path.Replace('\', '/')
 
 - 只读与写入模式均返回非空、受控长度（`<= 2 KiB`，远低于 `dsh-mcp-client` 的 32,768 B 上限）且不含本机路径的 MCP `instructions`。
 - 模拟 `dsh` `stdio` 探针（`initialize → listTools → 立即关闭`）不会创建或写入 `--state-root`、不留锁、`stderr` 为空且干净退出；随后正式拉起可正常读写。
-- 全量 21 个工具的 JSON Schema 与元数据审计（顶层 `type: "object"`、`additionalProperties: false`、无 `$ref`/`$defs`、无不兼容正则、`mcp__webgal__*` 命名与注解准确）。
+- 全量 23 个工具的 JSON Schema 与元数据审计（顶层 `type: "object"`、`additionalProperties: false`、无 `$ref`/`$defs`、无不兼容正则、`mcp__webgal__*` 命名与注解准确）。
 - 正常返回、业务错误和参数校验错误下，`content[0].text` 与 `structuredContent` 保持一致且不返回空 `content`。
 - 模拟精简环境变量（`scrubbed env`，SDK 仍会合并其默认基础变量，因此为“精简”而非完全为空）与异地 `cwd` 启动读写正常，且验证 `directoryPublisherEnv` 在缺失 `ProgramFiles`/`SystemRoot` 时的安全回退。
 - 模拟 `dsh` 重启/重连：断开连接后旧 `sessionId` 立即失效，且 `recovery_inspect` 仍可凭 `planId` 查到既有批次。
@@ -179,7 +181,7 @@ $repo = (Get-Location).Path.Replace('\', '/')
 
 - [ ] 核对当前本机 `dsh` 版本的 `Settings → MCP` 界面入口与 `cordis.patch.yml` 路径/字段，确认与本文档一致（如有差异记入 PR 或更新文档）。
 - [ ] 在 Windows + Node.js 24 下完成 `npm ci`、`npm run check`、`npm test` 全绿。
-- [ ] 先以只读模式把 `webgal-mcp` 接入 `dsh`（使用绝对路径），确认 `dsh` 中可见 11 个 `mcp__webgal__*` 工具且无启动错误。
+- [ ] 先以只读模式把 `webgal-mcp` 接入 `dsh`（使用绝对路径），确认 `dsh` 中可见 13 个 `mcp__webgal__*` 工具且无启动错误。
 
 #### 2. 只读检查与 `project_scan`
 
@@ -189,7 +191,7 @@ $repo = (Get-Location).Path.Replace('\', '/')
 
 #### 3. 受控写入交接与 Terre 预览
 
-- [ ] 在 `dsh` 的 `webgal` 启动参数追加独立绝对路径 `--state-root`，重启/重载后用 `webgal_status` 确认 `writeToolsEnabled: true` 且暴露 21 个工具。
+- [ ] 在 `dsh` 的 `webgal` 启动参数追加独立绝对路径 `--state-root`，重启/重载后用 `webgal_status` 确认 `writeToolsEnabled: true` 且暴露 23 个工具。
 - [ ] 用提示词 3 生成 `start.txt` 只读草案，确认模型未在人工交接前私自调用 `write_session_begin` 或 `change_apply`。
 - [ ] 在 Terre 保存专用工程并关闭该工程的全部编辑页，明确文字回复模型交接；确认模型重新生成可应用计划并等待再次确认。
 - [ ] 确认后记录 `planId`，执行 `change_apply` 与 `write_session_end`。

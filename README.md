@@ -32,7 +32,10 @@
 读出开场第一句，让我确认选对了游戏。
 ```
 
-如果只想整理素材，可以只安装 `webgal-librarian`。[Codex 手动安装](docs/tool-reference.md#手动安装) · [单独安装 Librarian](docs/tool-reference.md#单独安装-librarian) 
+整理图片和音频、查询已有分册，可以只安装 `webgal-librarian`。为 Live2D 新建分册还需要 MCP。[Codex 手动安装](docs/tool-reference.md#手动安装) · [单独安装 Librarian](docs/tool-reference.md#单独安装-librarian)
+
+需要在游戏里安排 Live2D 角色出场、动作或表情时，再给 Creator 或 Editor 加装 [webgal-live2d](skills/webgal-live2d/SKILL.md)。普通立绘、对白和音乐编辑可直接使用基础 Skill。
+
 使用 DSH手动安装时，可通过 `cordis.patch.yml` 配置 `webgal` MCP，先以只读模式连接测试工程。[DSH 接入指南](docs/deepseek-harness.md)
 
 ## 用 Creator Skill 把文章做成短篇
@@ -50,6 +53,8 @@
 ## 用 Librarian 管理共享素材库
 
 > 请用 webgal-librarian Skill 扫描我的素材文件夹，保持目录原样，只建索引。帮我找一首适合「放学后在车站告别」的 BGM。
+
+即使用静态立绘制作游戏，Librarian 也能为同一素材库里的 Live2D 模型建档。首次建档或重扫时连接 MCP 并登记模型所在目录，之后可以离线查询，例如「找这套冬装爱音的眨眼表情」。要把动作编排进游戏，再用 Editor 和可选的演出 Skill，例如「在这句台词之后让祥子鞠躬，保留当前站位」。[Live2D 模型与演出](docs/tool-reference.md#live2d-模型与演出)
 
 建库后，从根目录的 `INDEX.md` 可以打开各类素材分册，手动补充描述和标签。立绘通常按角色分册。每次搜索最多向 agent 返回 5 个候选，合计不超过 2,000 字符。只有你明确询问来源、授权或指定相关条件时，对应字段才会进入对话。[分册格式](skills/webgal-librarian/references/index-format.md)
 

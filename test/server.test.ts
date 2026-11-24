@@ -108,7 +108,7 @@ afterAll(async () => {
 describe('P1 real stdio read-only tool surface', () => {
   it('exposes the read tools and no mutation surface', async () => {
     const tools = (await client.listTools()).tools;
-    expect(tools.map(t => t.name).sort()).toEqual(['webgal_status', 'project_list', 'project_inspect', 'project_scan', 'scene_list', 'scene_read', 'scene_validate', 'asset_list', 'live2d_model_inspect', 'game_config_read', 'preview_get_url'].sort());
+    expect(tools.map(t => t.name).sort()).toEqual(['webgal_status', 'project_list', 'project_inspect', 'project_scan', 'scene_list', 'scene_read', 'scene_validate', 'asset_list', 'live2d_model_discover', 'live2d_model_inspect', 'live2d_model_entries', 'game_config_read', 'preview_get_url'].sort());
     expect(tools.every(t => t.annotations?.readOnlyHint === true && t.annotations?.destructiveHint === false)).toBe(true);
     const status = await call('webgal_status');
     expect(status.data).toMatchObject({

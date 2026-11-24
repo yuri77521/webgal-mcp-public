@@ -762,7 +762,7 @@ export async function assertCreateTargetAbsent(
 }
 
 export function checkedModelDirectory(directory: string): string {
-  if (!/^game\/figure\/[^/]+$/.test(directory)) {
+  if (!/^game\/figure\/[^/]+$/.test(directory) || path.posix.basename(directory).startsWith('.')) {
     fail('PATH_INVALID', 'Choose one new model directory under game/figure.');
   }
   return assertReferenceableTarget(directory);
@@ -1319,10 +1319,13 @@ export async function publishTarget(
   bytes: Uint8Array,
   batchId: string,
   index: number,
-  authorize?: () => void
+  authorize?: () => void,
+  options?: { replaceReferenceableTarget?: boolean },
 ): Promise<void> {
   const creating = expectedRevision === null;
-  const validated = assertWritePath(relative, creating);
+  const validated = !creating && options?.replaceReferenceableTarget === true
+    ? assertReferenceableTarget(relative)
+    : assertWritePath(relative, creating);
   const normalizedExpectedRevision = normalizeRevision(expectedRevision);
   const normalizedBatchId = normalizeBatchId(batchId);
   const normalizedIndex = normalizeIndex(index);

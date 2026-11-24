@@ -161,7 +161,11 @@ it('blocks an occupied destination, conflicting names, and unsafe extras', async
   expect(await readFile(existing, 'utf8')).toBe('existing');
   await put(source, entry, model({ ...standard, Textures: ['texture/main.png', 'texture/MAIN.png'] }));
   await put(source, 'hero/texture/MAIN.png');
-  expect((await draft()).blockingIssues).toContainEqual({ code: 'TARGET_EXISTS' });
+  const collision = await planLive2dImport(config, { ...input, targetDirectory: 'new-hero' }, async () => {
+    throw new Error('A filename collision cannot produce a write plan.');
+  });
+  expect(collision.blockingIssues).toContainEqual(expect.objectContaining({ code: 'TARGET_EXISTS' }));
+  expect(collision.committable).toBe(false);
   expect((await draft(['script.js'])).blockingIssues).toContainEqual({ code: 'INVALID_ARGUMENT' });
 });
 

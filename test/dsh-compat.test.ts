@@ -24,7 +24,9 @@ const READ_ONLY_TOOLS = [
   'scene_read',
   'scene_validate',
   'asset_list',
+  'live2d_model_discover',
   'live2d_model_inspect',
+  'live2d_model_entries',
   'game_config_read',
   'preview_get_url',
 ] as const;
@@ -269,7 +271,7 @@ describe('DeepSeek Harness (dsh) compatibility', () => {
     const probeTools = (await probe.client.listTools()).tools;
     await probe.client.close();
 
-    expect(probeTools).toHaveLength(21);
+    expect(probeTools).toHaveLength(23);
     expect(probe.stderr()).toBe('');
     expect(await pathExists(stateRoot)).toBe(false);
 
@@ -379,12 +381,12 @@ describe('DeepSeek Harness (dsh) compatibility', () => {
     expect(await pathExists(stateRoot)).toBe(false);
   });
 
-  it('passes static JSON Schema, naming, and annotation audits across all 21 tools for dsh + DeepSeek', async () => {
+  it('passes static JSON Schema, naming, and annotation audits across all 23 tools for dsh + DeepSeek', async () => {
     const stateRoot = path.join(temporary, 'state-schema-audit');
     const conn = await connectStdio({ args: [cli, '--config', configPath, '--state-root', stateRoot] });
     try {
       const tools = (await conn.client.listTools()).tools;
-      expect(tools).toHaveLength(21);
+      expect(tools).toHaveLength(23);
 
       const expectedAll = [
         ...READ_ONLY_TOOLS,

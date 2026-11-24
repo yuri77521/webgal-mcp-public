@@ -1,11 +1,19 @@
 ---
 name: webgal-librarian
-description: 管理可手改的 WebGAL 共享素材分册，按角色、场景或情绪查找背景、立绘、BGM 和音效，供 Creator 和 Editor 复用。
+description: 管理可手改的 WebGAL 共享素材分册，按角色、场景或情绪查找背景、立绘、Live2D、BGM 和音效，供 Creator 和 Editor 复用。
 ---
 
 # WebGAL Librarian
 
 使用随 Skill 安装的 Python 3.10+ 标准库 CLI。下文 `$tool` 是 `scripts/library.py` 的绝对路径，`$lib` 是用户指定的库根。运行脚本即可；日常找图、盘点、交接都通过 CLI 完成。全量读取 Markdown、列出全目录、打印脚本源码会把无关数据带入上下文。
+
+## 读取 Live2D 模型档案
+
+1. 模型发现和检查使用 MCP；库根中已有模型入口时，用同目录的 `sync_live2d.py` 把完整分页快照一次写入，不手工转存 JSON。命令为 `python "$skill/scripts/sync_live2d.py" "$lib" --server "<dist/cli.js>" --config "<config>" --source "<sourceId>" --package "<source 内目录>" --entry "<source 内模型入口>" --character "<角色>" --model-name "<模型>" --prefix "<默认命名空间>"`。`--package`、`--entry` 都相对登记源；根位置分别写 `.` 和入口路径。Sakiko 使用 `--prefix sakiko/`，无命名空间的模型用空字符串。
+2. 桥接只把 MCP 元数据送入库。原生动作纹理、动作、表情和绑定声音由 MCP 的 `rootRelativePath` 定位，排除在背景、立绘、BGM、音效候选之外。`live2d-ingest` 每次只消费一页；`scanId`、revision 或页序不连续时不得继续。扫描中断后直接重跑 `sync_live2d.py`，其新 `scanId` 会安全重启；旧条目在完整快照写入前继续可用，不必删除分册。
+3. 入库后按硬条件搜索：`python "$tool" search "$lib" --type Live2D --group 祥子 --model school_winter-2023 --kind expression --term 哭泣 --term 犹豫`。`--kind` 取 `motion|expression`，`--status` 可取 `available|registered|unregistered|missing|invalid|unverified|stale|all`。给定 `--group` 或 `--model` 时自动使用该模型的默认前缀；用户明确要跨角色搜索时传 `--prefix ""`，其他前缀精确按大小写匹配调用名开头。仍遵守单次最多 5 项、2,000 字符和最多两轮。
+4. 用返回的复合 `路径` 执行 `show "$lib" --path "<Live2D引用>"`。`预览状态` 明确区分「未预览」「已预览」「待复核」；待复核表示入口 revision 或动作/表情文件 SHA-256 已变化，必须重新预览。`验证范围` 表示只校验动作/表情文件 SHA-256 与模型入口 revision，不覆盖 moc、贴图、物理或其他依赖，不能据此宣称整模型视觉复检。结果为 `unregistered`、`missing`、`stale` 或 `unverified` 时另说明可用性缺口。普通 `show` 不输出 Markdown 备注、来源或授权；用户明确要求后才分别使用 `--source`/`--license`。MCP 定位只在 `show` 的 `MCP定位` 中返回。
+5. 只有实际预览过动作或表情后才运行 `python "$tool" verify-live2d "$lib" "<Live2D引用>" --observation "<实际看见的效果>"`。观察应写可见或可听效果，例如「抬手后低头，眼角有泪光」，不要仅写「正常」。CLI 会重新计算当前动作/表情文件 SHA-256 并绑定当前模型入口 revision；文件与入库快照不一致时拒绝登记并标为待复核。重扫保留旧观察和分册手注，但文件或 revision 变化后状态回到待复核；重新预览并再次执行本命令才闭环。`已预览` 只表示上述文件与入口范围通过，不能外推为 moc、贴图或其他依赖也已复核。
 
 ## 按情境找素材
 
@@ -22,4 +30,4 @@ description: 管理可手改的 WebGAL 共享素材分册，按角色、场景�
 
 ## 按自然语言补注
 
-通过 search / show 确认唯一目标。同名无法消歧时展示候选路径。用 `tag "$lib" "<相对路径>" "<标签>"` 或 `set "$lib" "<相对路径>" "<字段>" "<值>"` 保存；仅按用户要求维护来源或授权，保留原文限制。用 show 核对所改字段。描述可根据用户说明、已查看内容或已有标注完善。
+通过 search / show 确认唯一目标。同名无法消歧时展示候选路径。用 `tag "$lib" "<相对路径>" "<标签>"` 或 `set "$lib" "<相对路径>" "<字段>" "<值>"` 保存；仅按用户要求维护来源或授权，保留原文限制。用 show 核对所改字段。Live2D 也使用复合引用维护描述和标签，重新同步时保留这些字段及块外手写备注。描述可根据用户说明、已查看内容或已有标注完善。

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 function check(condition, message) {
   if (!condition) throw new Error(message);
@@ -53,12 +53,21 @@ function makeEdit(scene, start, before, after) {
 }
 
 function run({ mode, scene, projectId, needle, firstLine, lastLine = firstLine, before, after, receipt,
-  target, x, duration, cues }) {
+  target, x, duration, cues }, cueBeforeLine) {
   check(projectId && scene?.source === 'disk' && typeof scene.path === 'string'
     && validText(scene.text) && ['utf-8', 'utf-8-bom'].includes(scene.encoding), 'Use an original scene_read snapshot.');
   const raw = bytes(scene.text, scene.encoding);
   check(raw.length === scene.bytes && hash(raw) === scene.revision, 'Saved bytes disagree with scene_read.');
   const lines = linesOf(scene.text);
+  if (cueBeforeLine !== undefined) {
+    const anchor = lines[firstLine - 1];
+    check(Number.isInteger(firstLine) && anchor?.text && anchor.text === before,
+      'Select the exact saved dialogue line before which the model changes.');
+    const eol = lines[firstLine - 2]?.eol || anchor.eol || '\n';
+    const insertion = cueBeforeLine + eol;
+    const draft = run({ mode: 'draft', projectId, scene, firstLine, before, after: insertion + before });
+    return { ...draft, candidateText: scene.text.slice(0, anchor.start) + insertion + scene.text.slice(anchor.start) };
+  }
   if (mode === 'bgm') {
     check(Array.isArray(cues) && cues.length > 0, 'Supply music cues in saved line order.');
     const edits = cues.map(({ line, before: anchorText, track }, index) => {
@@ -150,7 +159,14 @@ function run({ mode, scene, projectId, needle, firstLine, lastLine = firstLine, 
 
 try {
   const request = JSON.parse(readFileSync(0, 'utf8'));
-  process.stdout.write(JSON.stringify(run(request)) + '\n');
+  let cueBeforeLine;
+  if (request.mode === 'live2d') {
+    const moduleUrl = new URL('../../webgal-live2d/scripts/figure-cue.mjs', import.meta.url);
+    if (!existsSync(moduleUrl)) throw new Error('Install webgal-live2d alongside webgal-editor for Live2D staging.');
+    const { buildFigureCue } = await import(moduleUrl);
+    cueBeforeLine = buildFigureCue(request);
+  }
+  process.stdout.write(JSON.stringify(run(request, cueBeforeLine)) + '\n');
 } catch (error) {
   process.stderr.write(error.message + '\n');
   process.exitCode = 1;
