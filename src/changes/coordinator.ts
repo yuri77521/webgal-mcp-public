@@ -10,7 +10,7 @@ import { canonicalProjectKey, ProjectLocks } from './locks.js';
 import { StateStore } from './store.js';
 import { copyAssetSource, describeAssetSource, readSource } from '../assets/source.js';
 import { validateRelativePath } from '../filesystem.js';
-import { assertCreateTargetAbsent, assertReferenceableTarget, assertWritePath, snapshotTarget, publishTarget, publishStreamedAsset, streamedTargetRevision, inspectStaging, inspectStreamedStaging, checkedModelDirectory, createModelDirectory, inspectModelDirectoryStaging, modelDirectoryIdentity } from './targets.js';
+import { assertCreateTargetAbsent, assertReferenceableTarget, assertWritePath, snapshotTarget, publishTarget, publishStreamedAsset, streamedTargetRevision, inspectStaging, inspectStreamedStaging, checkedModelDirectory, createModelDirectory, inspectModelDirectoryStaging, modelDirectoryIdentity, supportsOrdinaryAssetStreaming } from './targets.js';
 import { LARGE_ASSET_LIMITS, WRITE_LIMITS, type ChangeInput, type CoordinatorChange, type PlannedChange, type WritePlan, type BatchRecord, type ApplyResult, type FaultHook, type SourceRevision, type ModelBundle, type ModelDependencyRevision } from './types.js';
 
 const hash = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
@@ -93,8 +93,8 @@ function checkedOperations(operations: PlannedChange[], model?: ModelBundle) {
     paths.add(identity(op.path));
     if (op.source) {
       const validTarget = model
-        ? op.path.startsWith(`${model.directory}/`)
-        : /^game\/(?:background|bgm)\//.test(op.path) && op.source.bytes > WRITE_LIMITS.maxFileBytes;
+        ? op.path.startsWith(`${model.directory}/`) && (op.path !== model.modelPath || op.source.bytes <= WRITE_LIMITS.maxFileBytes)
+        : supportsOrdinaryAssetStreaming(op.path) && op.source.bytes > WRITE_LIMITS.maxFileBytes;
       if (!validTarget || op.expectedRevision !== null
         || op.source.revision !== op.newRevision || validateRelativePath(op.source.path) === '') corrupt();
       streamedTotal += op.source.bytes;

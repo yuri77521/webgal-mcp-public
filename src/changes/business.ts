@@ -11,7 +11,7 @@ import { AppError } from '../errors.js';
 import { resolveSafe, validateRelativePath } from '../filesystem.js';
 import type { AppConfig, ProjectConfig } from '../types.js';
 import type { WriteCoordinator } from './coordinator.js';
-import { assertCreateTargetAbsent, assertReferenceableTarget, snapshotTarget } from './targets.js';
+import { assertCreateTargetAbsent, assertReferenceableTarget, snapshotTarget, supportsOrdinaryAssetStreaming } from './targets.js';
 import {
   LARGE_ASSET_LIMITS,
   WRITE_LIMITS,
@@ -404,8 +404,8 @@ export class BusinessWriteService {
           rootKey: description.rootKey,
         };
         if (description.bytes > WRITE_LIMITS.maxFileBytes) {
-          if (operation.kind !== 'background' && operation.kind !== 'bgm') {
-            throw new AppError('FILE_TOO_LARGE', 'Only backgrounds and BGM support large asset imports.');
+          if (!supportsOrdinaryAssetStreaming(path)) {
+            throw new AppError('FILE_TOO_LARGE', 'Figure JSON exceeds the 1 MiB limit for ordinary imports.');
           }
           streamedBytes += description.bytes;
           if (streamedBytes > LARGE_ASSET_LIMITS.maxBatchBytes) {
