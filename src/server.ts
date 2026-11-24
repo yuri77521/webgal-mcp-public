@@ -5,7 +5,8 @@ import { ReadService, ASSET_DIRS } from './service.js';
 import { PROJECT_SCAN_LIMITS } from './project-scan.js';
 import { LIMITS, type AppConfig } from './types.js';
 import { registerWriteTools, type WriteToolOptions } from './write-tools.js';
-import { inspectLive2dModel } from './live2d/model.js';
+import { discoverLive2dModels } from './live2d/discover.js';
+import { inspectLive2dModel, listLive2dModelEntries } from './live2d/model.js';
 
 const projectId = z.string().min(1).max(64);
 const relativePath = z.string().min(1).max(1024);
@@ -18,7 +19,7 @@ export function serverInstructions(writeToolsEnabled: boolean): string {
       'webgal-mcp 当前为只读模式（仅开放只读工具）。',
       '- 排查连接、工程文件或 Terre 映射时先调用 webgal_status；不要臆测未读取的场景、配置或素材内容。',
       '- 读取结果为磁盘上已保存内容，不代表 WebGAL Terre 中未保存的编辑器缓冲。',
-      '- scene_validate、project_scan、live2d_model_inspect 仅为静态检查，不运行游戏、不访问外部 URL，动态引用需由用户在 Terre 预览确认。',
+      '- scene_validate、project_scan、live2d_model_discover、live2d_model_inspect、live2d_model_entries 仅为静态检查，不运行游戏、不访问外部 URL，动态引用需由用户在 Terre 预览确认。',
       '- 如需受控写入，须在 MCP 启动参数中配置位于所有工程和素材目录之外的 --state-root 并重启连接。',
     ].join('\n');
   }
@@ -85,16 +86,55 @@ export function createServer(config: AppConfig, options: WriteToolOptions = {}) 
   server.registerTool('scene_read', { description: 'Read a UTF-8 scene from disk with raw-byte SHA-256 revision and newline metadata. It may differ from unsaved Terre content.', inputSchema: z.object({ projectId, path: relativePath }).strict(), annotations }, args => result(() => service.scene(args.projectId, args.path)));
   server.registerTool('scene_validate', { description: 'Analyze scene syntax and static references without executing scripts or fetching resources. Dynamic references remain unresolved.', inputSchema: z.object({ projectId, path: relativePath, candidateText: z.string().max(LIMITS.textBytes).optional() }).strict(), annotations }, args => result(() => service.validate(args.projectId, args.path, args.candidateText)));
   server.registerTool('asset_list', { description: 'List existing assets in known game asset directories; no import, overwrite or download.', inputSchema: z.object({ projectId, kind: z.enum(Object.keys(ASSET_DIRS) as [keyof typeof ASSET_DIRS, ...(keyof typeof ASSET_DIRS)[]]).optional(), ...paging }).strict(), annotations }, args => result(() => service.assets(args.projectId, args.kind, args)));
-  server.registerTool('live2d_model_inspect', {
-    description: 'Inspect a .model3.json entry, its local dependencies, motion groups and expression names. Does not load Cubism or run the game.',
+  server.registerTool('live2d_model_discover', {
+    description: 'Discover Cubism 2 model.json and Cubism 3 .model3.json candidates in one registered source or project figure directory. Reports format, static status, and bounded item counts without loading Cubism or running the game.',
     inputSchema: z.object({
       location: z.discriminatedUnion('kind', [
-        z.object({ kind: z.literal('project'), projectId, modelPath: relativePath.describe('Relative to game/figure.') }).strict(),
-        z.object({ kind: z.literal('source'), sourceId: projectId, modelPath: relativePath.describe('Relative to the registered source.') }).strict(),
+        z.object({ kind: z.literal('project'), projectId }).strict(),
+        z.object({ kind: z.literal('source'), sourceId: projectId }).strict(),
+      ]),
+      directory: z.string().max(1024).optional().describe('Relative to the registered source root or game/figure.'),
+      offset: z.number().int().min(0).max(10_000).optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+    }).strict(),
+    annotations,
+  }, args => result(() => discoverLive2dModels(config, args)));
+  server.registerTool('live2d_model_inspect', {
+    description: 'Inspect a Cubism 2 model.json or Cubism 3 .model3.json entry, its local dependencies, motion groups, registered expressions, and nearby unregistered expressions. Lists are bounded to 256 entries; use live2d_model_entries for complete paged lookup.',
+    inputSchema: z.object({
+      location: z.discriminatedUnion('kind', [
+        z.object({
+          kind: z.literal('project'),
+          projectId,
+          modelPath: relativePath.describe('Relative to game/figure.'),
+          rootPath: z.string().max(1024).optional().describe('Optional boundary relative to game/figure.'),
+        }).strict(),
+        z.object({
+          kind: z.literal('source'),
+          sourceId: projectId,
+          modelPath: relativePath.describe('Relative to the registered source.'),
+          rootPath: z.string().max(1024).optional().describe('Optional boundary relative to the registered source.'),
+        }).strict(),
       ]),
     }).strict(),
     annotations,
   }, args => result(() => inspectLive2dModel(config, args.location)));
+  server.registerTool('live2d_model_entries', {
+    description: 'Page motion, expression, or dependency entries for a Live2D model. Dependencies include resolved root-relative paths. Use expectedRevision to reject pages from a changed model entry.',
+    inputSchema: z.object({
+      location: z.discriminatedUnion('kind', [
+        z.object({ kind: z.literal('project'), projectId, modelPath: relativePath, rootPath: z.string().max(1024).optional() }).strict(),
+        z.object({ kind: z.literal('source'), sourceId: projectId, modelPath: relativePath, rootPath: z.string().max(1024).optional() }).strict(),
+      ]),
+      kind: z.enum(['motion', 'expression', 'dependency']).optional(),
+      prefix: z.string().max(256).optional(),
+      includeUnregistered: z.boolean().optional(),
+      offset: z.number().int().min(0).max(10_000).optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+      expectedRevision: z.string().length(64).optional(),
+    }).strict(),
+    annotations,
+  }, args => result(() => listLive2dModelEntries(config, args.location, args)));
   server.registerTool('game_config_read', { description: 'Read game/config.txt as original text with a revision and parsed configuration summary.', inputSchema: z.object({ projectId }).strict(), annotations }, args => result(() => service.gameConfig(args.projectId)));
   server.registerTool('preview_get_url', { description: 'Return the configured official Terre preview URL. Does not open a browser, execute preview commands or prove the game runs.', inputSchema: z.object({ projectId }).strict(), annotations }, args => result(() => service.preview(args.projectId)));
   if (writeToolsEnabled) registerWriteTools(server, config, options, result);

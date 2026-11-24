@@ -18,6 +18,7 @@ CATEGORIES = {
     "立绘": {"figure", "figures", "portrait", "portraits", "立绘", "立繪"},
     "BGM": {"bgm", "music", "音乐", "音樂", "配乐", "配樂"},
     "音效": {"se", "sfx", "soundeffect", "soundeffects", "音效", "効果音"},
+    "Live2D": {"live2d", "live2D"},
 }
 UNKNOWN = "未知"
 
@@ -47,7 +48,9 @@ def category(key):
     return "图片待分类" if image else "音频待分类"
 
 
-def discover(root):
+def discover(root, excluded=None):
+    excluded = excluded or set()
+
     def visit(directory):
         for path in sorted(directory.iterdir(), key=lambda p: p.name):
             if linked(path):
@@ -58,7 +61,8 @@ def discover(root):
             elif path.is_file() and path.suffix.lower() in IMAGES | AUDIO:
                 key = path.relative_to(root).as_posix()
                 check_key(key)
-                yield key
+                if key not in excluded:
+                    yield key
 
     return set(visit(root))
 

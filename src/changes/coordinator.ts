@@ -11,15 +11,48 @@ import { StateStore } from './store.js';
 import { copyAssetSource, describeAssetSource, readSource } from '../assets/source.js';
 import { validateRelativePath } from '../filesystem.js';
 import { assertCreateTargetAbsent, assertReferenceableTarget, assertWritePath, snapshotTarget, publishTarget, publishStreamedAsset, streamedTargetRevision, inspectStaging, inspectStreamedStaging, checkedModelDirectory, createModelDirectory, inspectModelDirectoryStaging, modelDirectoryIdentity } from './targets.js';
-import { LARGE_ASSET_LIMITS, WRITE_LIMITS, type ChangeInput, type CoordinatorChange, type PlannedChange, type WritePlan, type BatchRecord, type ApplyResult, type FaultHook, type SourceRevision, type ModelBundle } from './types.js';
+import { LARGE_ASSET_LIMITS, WRITE_LIMITS, type ChangeInput, type CoordinatorChange, type PlannedChange, type WritePlan, type BatchRecord, type ApplyResult, type FaultHook, type SourceRevision, type ModelBundle, type ModelDependencyRevision } from './types.js';
 
 const hash = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
 const uuid = z.string().uuid();
 const revision = z.string().regex(/^[a-f0-9]{64}$/);
-const version = z.literal([1, 2, 3]);
+const version = z.literal([1, 2, 3, 4]);
 const operationPath = z.string().min(1).max(1024);
+const sourceRootPath = z.string().max(1024);
 const maxModelDirectories = 128;
-const modelBundleSchema = z.object({ directory: operationPath, modelPath: operationPath }).strict();
+const legacyModelBundleSchema = z.object({ directory: operationPath, modelPath: operationPath }).strict();
+const modelDirectoryExpectationSchema = z.object({
+  path: operationPath,
+  state: z.enum(['create', 'existing']),
+  identity: revision.optional(),
+}).strict();
+const modelSourceMappingSchema = z.object({
+  targetRelativePath: operationPath,
+  sourceRelativePath: operationPath,
+}).strict();
+const modelDependencyRevisionSchema = z.object({
+  path: operationPath,
+  revision,
+}).strict();
+const extendedModelBundleSchema = z.object({
+  directory: operationPath,
+  modelPath: operationPath,
+  mode: z.enum(['create', 'update']),
+  directories: z.array(modelDirectoryExpectationSchema).min(1).max(maxModelDirectories),
+  sourceId: z.string().min(1).max(64),
+  sourceRootPath,
+  bundleRevision: revision,
+  batchIndex: z.number().int().min(0).max(10_000),
+  batchCount: z.number().int().min(1).max(10_000),
+  skippedBatchIndices: z.array(z.number().int().min(0).max(10_000)).max(10_000).optional(),
+  previousPlanId: uuid.optional(),
+  entryIncluded: z.boolean(),
+  sourceMappings: z.array(modelSourceMappingSchema).max(WRITE_LIMITS.maxFiles).optional(),
+  dependencies: z.array(modelDependencyRevisionSchema).max(10_000).optional(),
+  targetEntryRevision: revision.optional(),
+  targetReferences: z.array(modelDependencyRevisionSchema).max(10_000).optional(),
+}).strict();
+const modelBundleSchema = z.union([extendedModelBundleSchema, legacyModelBundleSchema]);
 const modelDirectorySchema = z.object({ path: operationPath, phase: z.enum(['pending', 'intent', 'created']), identity: revision.optional() }).strict();
 const inlineOperation = z.object({ path: operationPath, expectedRevision: revision.nullable(), newRevision: revision, data: z.string().max(2 * WRITE_LIMITS.maxFileBytes) }).strict();
 const sourceSchema = z.object({ sourceId: z.string().min(1).max(64), path: z.string().min(1).max(1024), revision, rootKey: revision }).strict();
@@ -28,7 +61,7 @@ const streamedOperation = z.object({ path: operationPath, expectedRevision: z.nu
 const operationSchema = z.union([inlineOperation, streamedOperation]);
 const planSchema = z.object({ version, id: uuid, projectId: z.string(), projectKey: revision, ownerId: z.string(), sessionId: uuid, createdAt: z.number().finite(), expiresAt: z.number().finite(), operations: z.array(operationSchema).min(1).max(WRITE_LIMITS.maxFiles), digest: revision, restoresBatchId: uuid.optional(), sources: z.array(sourceSchema).min(1).max(WRITE_LIMITS.maxFiles).optional(), modelBundle: modelBundleSchema.optional() }).strict();
 const recordSchema = z.object({ path: z.string(), expectedRevision: revision.nullable(), newRevision: revision, backup: z.string().optional(), sourceBytes: assetSize.optional(), phase: z.enum(['pending', 'intent', 'applied']) }).strict();
-const batchSchema = z.object({ version, id: uuid, projectId: z.string(), projectKey: revision, ownerId: z.string(), planId: uuid, planDigest: revision, keyHash: revision, status: z.enum(['preparing', 'applying', 'complete', 'failed', 'partial', 'uncertain']), operations: z.array(recordSchema).min(1).max(WRITE_LIMITS.maxFiles), errorCode: z.string().optional(), createdAt: z.number().finite(), restoresBatchId: uuid.optional(), directories: z.array(modelDirectorySchema).min(1).max(maxModelDirectories).optional() }).strict();
+const batchSchema = z.object({ version, id: uuid, projectId: z.string(), projectKey: revision, ownerId: z.string(), planId: uuid, planDigest: revision, keyHash: revision, status: z.enum(['preparing', 'applying', 'complete', 'failed', 'partial', 'uncertain']), operations: z.array(recordSchema).min(1).max(WRITE_LIMITS.maxFiles), errorCode: z.string().optional(), createdAt: z.number().finite(), restoresBatchId: uuid.optional(), directories: z.array(modelDirectorySchema).max(maxModelDirectories).optional() }).strict();
 const keySchema = z.object({ version, projectKey: revision, planId: uuid, digest: revision, batchId: uuid }).strict();
 function corrupt(): never { throw new AppError('STATE_CORRUPT', 'Stored write state could not be validated. No recovery was applied.'); }
 function digest(plan: Omit<WritePlan, 'digest'>) {
@@ -37,7 +70,7 @@ function digest(plan: Omit<WritePlan, 'digest'>) {
     : op.data]);
   const payload: unknown[] = [plan.version, plan.id, plan.projectId, plan.projectKey, plan.ownerId, plan.sessionId, plan.createdAt, plan.expiresAt, operations, plan.restoresBatchId ?? null];
   if (plan.sources) payload.push(plan.sources.map(source => [source.sourceId, source.path, source.revision, source.rootKey]));
-  if (plan.modelBundle) payload.push([plan.modelBundle.directory, plan.modelBundle.modelPath]);
+  if (plan.modelBundle) payload.push(plan.modelBundle);
   return hash(JSON.stringify(payload));
 }
 function checkedId(id: string) { if (!uuid.safeParse(id).success) throw new AppError('INVALID_ARGUMENT', 'Invalid write record identifier.'); return id; }
@@ -51,7 +84,11 @@ function checkedOperations(operations: PlannedChange[], model?: ModelBundle) {
   let streamedTotal = 0;
   const paths = new Set<string>();
   for (const op of operations) {
-    assertWritePath(op.path, op.expectedRevision === null);
+    if (model && op.path === model.modelPath && op.expectedRevision !== null) {
+      assertReferenceableTarget(op.path);
+    } else {
+      assertWritePath(op.path, op.expectedRevision === null);
+    }
     if (paths.has(identity(op.path))) throw new AppError('INVALID_ARGUMENT', 'A batch cannot contain duplicate target paths.');
     paths.add(identity(op.path));
     if (op.source) {
@@ -66,17 +103,91 @@ function checkedOperations(operations: PlannedChange[], model?: ModelBundle) {
     }
     const data = Buffer.from(op.data, 'base64');
     total += data.byteLength;
-    if (data.toString('base64') !== op.data || data.byteLength > WRITE_LIMITS.maxFileBytes || total > WRITE_LIMITS.maxBatchBytes || hash(data) !== op.newRevision) corrupt();
+    if (data.toString('base64') !== op.data || data.byteLength > WRITE_LIMITS.maxFileBytes
+      || total > WRITE_LIMITS.maxBatchBytes || hash(data) !== op.newRevision
+      || (model && op.path !== model.modelPath)) corrupt();
   }
 }
 
-export function checkedModelDirectories(model: ModelBundle, operations: readonly Pick<PlannedChange, 'path' | 'source'>[]): string[] {
+function extendedModel(model: ModelBundle): model is ModelBundle & {
+  mode: 'create' | 'update';
+  directories: NonNullable<ModelBundle['directories']>;
+  sourceId: string;
+  sourceRootPath: string;
+  bundleRevision: string;
+  batchIndex: number;
+  batchCount: number;
+  entryIncluded: boolean;
+  dependencies?: NonNullable<ModelBundle['dependencies']>;
+} {
+  return model.directories !== undefined;
+}
+
+function modelEntryName(path: string) {
+  const name = posix.basename(path).toLowerCase();
+  return name === 'model.json' || name.endsWith('.model3.json');
+}
+
+function modelTargetBindings(model: ModelBundle): ModelDependencyRevision[] {
+  return [
+    ...(model.targetEntryRevision ? [{ path: model.modelPath, revision: model.targetEntryRevision }] : []),
+    ...(model.targetReferences ?? []),
+  ];
+}
+
+type ModelOperation = Pick<PlannedChange, 'path' | 'source'> & { newRevision?: string };
+
+export function checkedModelDirectories(model: ModelBundle, operations: readonly ModelOperation[]): string[] {
   const root = checkedModelDirectory(model.directory);
-  const manifest = operations.at(-1);
-  if (!manifest?.source || manifest.path !== model.modelPath || posix.dirname(manifest.path) !== root
-    || !manifest.path.toLowerCase().endsWith('.model3.json')) corrupt();
-  const sourceParent = posix.dirname(manifest.source.path);
+  const last = operations.at(-1);
+  const entry = operations.find(operation => operation.path === model.modelPath);
+  const entryIncluded = last?.path === model.modelPath;
+  if (!last || !model.modelPath.startsWith(`${root}/`) || !modelEntryName(model.modelPath)
+    || entryIncluded !== !!entry || (extendedModel(model) && model.entryIncluded !== entryIncluded)) corrupt();
+  if (!extendedModel(model) && (!entryIncluded || !entry?.source)) corrupt();
+  if (extendedModel(model)
+    && (model.mode === undefined
+      || model.sourceId === undefined
+      || model.sourceRootPath === undefined
+      || model.bundleRevision === undefined
+      || model.batchIndex === undefined
+      || model.batchCount === undefined
+      || (model.sourceRootPath !== '' && validateRelativePath(model.sourceRootPath) !== model.sourceRootPath)
+      || model.batchIndex >= model.batchCount
+      || (model.skippedBatchIndices ?? []).some((index, position, skipped) => (
+        index >= model.batchIndex!
+        || (position > 0 && index <= skipped[position - 1])
+      ))
+      || (model.previousPlanId === undefined
+        && (model.skippedBatchIndices?.length ?? 0) !== model.batchIndex))) corrupt();
+  const sourceMappings = model.sourceMappings ?? [];
+  const mappingByTarget = new Map(sourceMappings.map(mapping => [mapping.targetRelativePath, mapping]));
+  if (new Set(sourceMappings.map(mapping => mapping.targetRelativePath)).size !== sourceMappings.length
+    || new Set(sourceMappings.map(mapping => mapping.sourceRelativePath)).size !== sourceMappings.length
+    || sourceMappings.some(mapping => (
+      validateRelativePath(mapping.targetRelativePath) !== mapping.targetRelativePath
+      || validateRelativePath(mapping.sourceRelativePath) !== mapping.sourceRelativePath
+    ))) corrupt();
+  const dependencies = model.dependencies ?? [];
+  const dependencyByPath = new Map(dependencies.map(dependency => [identity(dependency.path), dependency]));
+  if ((extendedModel(model) && model.entryIncluded && model.dependencies === undefined)
+    || dependencyByPath.size !== dependencies.length
+    || dependencies.some(dependency => (
+      !dependency.path.startsWith(`${root}/`)
+      || validateRelativePath(dependency.path) !== dependency.path
+    ))) corrupt();
+  const targetReferences = model.targetReferences ?? [];
+  const targetReferenceByPath = new Map(targetReferences.map(reference => [identity(reference.path), reference]));
+  const operationPaths = new Set(operations.map(operation => identity(operation.path)));
+  if (targetReferenceByPath.size !== targetReferences.length
+    || targetReferences.some(reference => (
+      !reference.path.startsWith(`${root}/`)
+      || validateRelativePath(reference.path) !== reference.path
+      || identity(reference.path) === identity(model.modelPath)
+      || operationPaths.has(identity(reference.path))
+    ))) corrupt();
   const paths = new Map<string, { path: string; directory: boolean }>();
+  const usedSourceMappings = new Set<string>();
   const directories = new Set([root]);
   const add = (path: string, directory: boolean) => {
     const key = path.normalize('NFC').toLowerCase();
@@ -88,10 +199,19 @@ export function checkedModelDirectories(model: ModelBundle, operations: readonly
   };
   for (const op of operations) {
     assertReferenceableTarget(op.path);
-    const relative = op.path.slice(root.length + 1);
-    if (!op.source || !op.path.startsWith(`${root}/`) || op.source.sourceId !== manifest.source.sourceId
-      || op.source.rootKey !== manifest.source.rootKey || op.source.path !== posix.join(sourceParent, relative)
-      || (op !== manifest && op.path.toLowerCase().endsWith('.model3.json'))) corrupt();
+    if (!op.path.startsWith(`${root}/`) || (op !== entry && !op.source)
+      || (op !== entry && modelEntryName(op.path))) corrupt();
+    if (extendedModel(model) && op.source) {
+      const relative = op.path.slice(root.length + 1);
+      const mapping = mappingByTarget.get(relative);
+      const sourceRelativePath = mapping?.sourceRelativePath ?? relative;
+      if (sourceMappings.length && !mapping) corrupt();
+      if (mapping) usedSourceMappings.add(mapping.targetRelativePath);
+      const expectedSourcePath = posix.join(model.sourceRootPath, sourceRelativePath);
+      if (op.source.sourceId !== model.sourceId || op.source.path !== expectedSourcePath) corrupt();
+      const dependency = dependencyByPath.get(identity(op.path));
+      if (model.dependencies && (!dependency || !op.newRevision || dependency.revision !== op.newRevision)) corrupt();
+    }
     add(op.path, false);
     for (let parent = posix.dirname(op.path); parent !== root; parent = posix.dirname(parent)) {
       add(parent, true);
@@ -101,7 +221,35 @@ export function checkedModelDirectories(model: ModelBundle, operations: readonly
       }
     }
   }
-  return [...directories].sort((left, right) => left.length - right.length || (left < right ? -1 : left > right ? 1 : 0));
+  if (sourceMappings.some(mapping => !usedSourceMappings.has(mapping.targetRelativePath))) corrupt();
+  const sorted = [...directories].sort((left, right) => left.length - right.length || (left < right ? -1 : left > right ? 1 : 0));
+  if (extendedModel(model)) {
+    const expected = model.directories;
+    if (expected.length > maxModelDirectories
+      || new Set(expected.map(item => identity(item.path))).size !== expected.length
+      || expected.some(item => !item.path.startsWith(`${root}`)
+        || (item.path !== root && !item.path.startsWith(`${root}/`))
+        || (item.state === 'create' && item.identity !== undefined)
+        || (item.state === 'existing' && item.identity === undefined))
+      || expected.map(item => item.path)
+        .sort((left, right) => left.length - right.length || left.localeCompare(right))
+        .join('\n') !== sorted.join('\n')
+      || (model.mode === 'create' && expected.some(item => item.state !== 'create'))
+      || (model.mode === 'update' && expected.find(item => item.path === root)?.state !== 'existing')) corrupt();
+  }
+  return sorted;
+}
+
+export function modelCreateDirectories(model: ModelBundle, operations: readonly ModelOperation[]) {
+  if (!extendedModel(model)) return checkedModelDirectories(model, operations);
+  checkedModelDirectories(model, operations);
+  return model.directories.filter(item => item.state === 'create').map(item => item.path);
+}
+
+export function modelExistingDirectories(model: ModelBundle, operations: readonly ModelOperation[]) {
+  if (!extendedModel(model)) return [];
+  checkedModelDirectories(model, operations);
+  return model.directories.filter(item => item.state === 'existing');
 }
 function summarize(record: BatchRecord, replayed = false): ApplyResult {
   return { batchId: record.id, status: record.status, operations: structuredClone(record.operations), ...(record.errorCode ? { errorCode: record.errorCode } : {}), replayed };
@@ -141,6 +289,7 @@ export class WriteCoordinator {
   }
   async plan(ownerId: string, sessionId: string, projectId: string, changes: CoordinatorChange[], restoresBatchId?: string, sources?: SourceRevision[], modelBundle?: ModelBundle): Promise<WritePlan> {
     const project = getProject(this.config, projectId);
+    if (modelBundle?.previousPlanId) await this.assertModelContinuation(projectId, modelBundle);
     if (!Array.isArray(changes) || changes.length < 1 || changes.length > WRITE_LIMITS.maxFiles) throw new AppError('INVALID_ARGUMENT', 'Invalid batch size.');
     if (changes.reduce((total, change) => total + ('bytes' in change ? change.bytes?.byteLength ?? 0 : 0), 0) > WRITE_LIMITS.maxBatchBytes) throw new AppError('LIMIT_EXCEEDED', 'The batch exceeds the configured byte limit.');
     const operations: PlannedChange[] = changes.map(change => {
@@ -156,11 +305,16 @@ export class WriteCoordinator {
       }
       if (!(change.bytes instanceof Uint8Array) || change.bytes.byteLength > WRITE_LIMITS.maxFileBytes || !revision.nullable().safeParse(change.expectedRevision).success) throw new AppError('INVALID_ARGUMENT', 'Invalid change payload or base revision.');
       const bytes = Buffer.from(change.bytes);
-      return { path: assertWritePath(change.path, change.expectedRevision === null), expectedRevision: change.expectedRevision, newRevision: hash(bytes), data: bytes.toString('base64') };
+      const path = modelBundle && change.path === modelBundle.modelPath && change.expectedRevision !== null
+        ? assertReferenceableTarget(change.path)
+        : assertWritePath(change.path, change.expectedRevision === null);
+      return { path, expectedRevision: change.expectedRevision, newRevision: hash(bytes), data: bytes.toString('base64') };
     });
     checkedOperations(operations, modelBundle);
     if (modelBundle) checkedModelDirectories(modelBundle, operations);
-    const planVersion = modelBundle ? 3 : operations.some(operation => operation.source) ? 2 : 1;
+    const planVersion = modelBundle
+      ? modelBundle.directories !== undefined ? 4 : 3
+      : operations.some(operation => operation.source) ? 2 : 1;
     if ((planVersion !== 1 && restoresBatchId) || (modelBundle && sources?.length)) corrupt();
     if (!restoresBatchId) operations.forEach(op => assertReferenceableTarget(op.path));
     const session = this.sessions.require(sessionId, ownerId, projectId, operations.map(op => op.path));
@@ -174,13 +328,81 @@ export class WriteCoordinator {
     await this.store.createJson(`plans/${plan.id}.json`, plan);
     return structuredClone(plan);
   }
+  private async assertModelContinuation(projectId: string, model: ModelBundle) {
+    if (!extendedModel(model) || !model.previousPlanId) corrupt();
+    const previousPlan = await this.readPlan(model.previousPlanId);
+    const previousModel = previousPlan.modelBundle;
+    if (!previousModel || !extendedModel(previousModel)
+      || previousModel.directory !== model.directory
+      || previousModel.modelPath !== model.modelPath
+      || previousModel.sourceId !== model.sourceId
+      || previousModel.sourceRootPath !== model.sourceRootPath
+      || previousModel.bundleRevision !== model.bundleRevision
+      || previousModel.batchCount !== model.batchCount
+      || model.batchCount < model.batchIndex + 1) {
+      throw new AppError('INVALID_ARGUMENT', 'The model continuation does not match the reviewed bundle.');
+    }
+    const skipped = new Set(model.skippedBatchIndices ?? []);
+    const skippedGap = (from: number, to: number) => {
+      for (let index = from + 1; index < to; index++) {
+        if (!skipped.has(index)) return false;
+      }
+      return true;
+    };
+    let previousBatch;
+    for (const id of await this.store.listBatchIds()) {
+      try {
+        const raw = batchSchema.parse(await this.store.readJson(`batches/${checkedId(id)}/journal.json`));
+        if (raw.projectId === projectId && raw.planId === model.previousPlanId) {
+          previousBatch = await this.readBatch(id, projectId);
+          break;
+        }
+      } catch {
+        // Unreadable unrelated batches are reported by recovery, not adopted here.
+      }
+    }
+    if (!previousBatch) throw new AppError('RECOVERY_REQUIRED', 'The previous model batch could not be verified.');
+    const { record } = previousBatch;
+    if (record.status === 'uncertain' || record.status === 'preparing' || record.status === 'applying') {
+      throw new AppError('RECOVERY_REQUIRED', 'Inspect and resolve the previous model batch before continuing.');
+    }
+    if (record.status === 'complete' && (previousModel.entryIncluded
+      || model.batchIndex <= previousModel.batchIndex
+      || !skippedGap(previousModel.batchIndex, model.batchIndex))) {
+      throw new AppError('INVALID_ARGUMENT', 'The previous model batch is complete and cannot be continued.');
+    }
+    if (record.status === 'partial' || record.status === 'failed') {
+      const retriesSameBatch = model.batchIndex === previousModel.batchIndex;
+      const advancesAfterAppliedBatch = !previousModel.entryIncluded
+        && model.batchIndex > previousModel.batchIndex
+        && skippedGap(previousModel.batchIndex, model.batchIndex)
+        && record.operations.every(operation => operation.phase === 'applied');
+      if (!retriesSameBatch && !advancesAfterAppliedBatch) {
+        throw new AppError('INVALID_ARGUMENT', 'Retry a failed model batch or continue only after every operation in it was verified as applied.');
+      }
+    }
+    const previousRootIdentity = record.directories?.find(directory => directory.path === model.directory)?.identity
+      ?? previousModel.directories.find(directory => directory.path === model.directory)?.identity;
+    const currentRoot = model.directories?.find(directory => directory.path === model.directory);
+    if (!currentRoot) corrupt();
+    if (previousRootIdentity) {
+      if (model.mode !== 'update' || currentRoot.state !== 'existing' || currentRoot.identity !== previousRootIdentity) {
+        throw new AppError('FILE_CHANGED', 'The model directory no longer matches the previous batch.');
+      }
+    } else if (model.mode !== 'create') {
+      throw new AppError('INVALID_ARGUMENT', 'A continuation without a model directory must be a create batch.');
+    }
+  }
   private async readPlan(id: string): Promise<WritePlan> {
     const parsed = planSchema.safeParse(await this.store.readJson(`plans/${checkedId(id)}.json`));
     if (!parsed.success) corrupt();
     const plan = parsed.data;
     if (plan.id !== id || digest(plan) !== plan.digest) corrupt();
-    if ((plan.version !== 1) !== plan.operations.some(operation => 'source' in operation)
-      || (plan.version !== 1 && plan.restoresBatchId) || (plan.version === 3) !== !!plan.modelBundle
+    const hasSource = plan.operations.some(operation => 'source' in operation);
+    if ((plan.version === 1 && hasSource) || (plan.version !== 1 && !hasSource && plan.version !== 4)
+      || (plan.version !== 1 && plan.restoresBatchId) || !((plan.version === 3 || plan.version === 4) === !!plan.modelBundle)
+      || (plan.version === 3 && plan.modelBundle && extendedModel(plan.modelBundle))
+      || (plan.version === 4 && plan.modelBundle && !extendedModel(plan.modelBundle))
       || (plan.modelBundle && plan.sources)) corrupt();
     checkedOperations(plan.operations, plan.modelBundle);
     if (plan.modelBundle) checkedModelDirectories(plan.modelBundle, plan.operations);
@@ -220,7 +442,7 @@ export class WriteCoordinator {
       if (op.expectedRevision === null && op.backup !== undefined) corrupt();
       if (record.status === 'complete' && (op.phase !== 'applied' || (op.expectedRevision !== null && !op.backup))) corrupt();
     });
-    const expectedDirectories = plan.modelBundle ? checkedModelDirectories(plan.modelBundle, plan.operations) : [];
+    const expectedDirectories = plan.modelBundle ? modelCreateDirectories(plan.modelBundle, plan.operations) : [];
     if (expectedDirectories.length !== (record.directories?.length ?? 0)
       || record.directories?.some((directory, index) => directory.path !== expectedDirectories[index]
         || (directory.phase === 'created') !== !!directory.identity
@@ -229,8 +451,39 @@ export class WriteCoordinator {
   }
   private async preflight(project: ProjectConfig, operations: PlannedChange[], model?: ModelBundle) {
     if (model) {
-      await assertCreateTargetAbsent(project.root, model.directory);
-      return operations.map(() => ({ bytes: null, revision: null }));
+      checkedModelDirectories(model, operations);
+      for (const directory of modelExistingDirectories(model, operations)) {
+        if (await modelDirectoryIdentity(project.root, directory.path) !== directory.identity) {
+          throw new AppError('FILE_CHANGED', 'An existing model directory changed after the package was reviewed.');
+        }
+      }
+      const createDirectories = modelCreateDirectories(model, operations);
+      for (const path of createDirectories) {
+        if (createDirectories.some(parent => parent !== path && path.startsWith(`${parent}/`))) continue;
+        await assertCreateTargetAbsent(project.root, path);
+      }
+      const snapshots = [];
+      const willCreateParent = (path: string) => createDirectories.some(directory =>
+        path.startsWith(`${directory}/`));
+      for (const op of operations) {
+        if (op.expectedRevision === null) {
+          if (!willCreateParent(op.path)) await assertCreateTargetAbsent(project.root, op.path);
+          snapshots.push({ bytes: null, revision: null });
+          continue;
+        }
+        const snapshot = await snapshotTarget(project.root, op.path);
+        if (snapshot.revision !== op.expectedRevision) {
+          throw new AppError('REVISION_CONFLICT', 'A model target no longer matches the reviewed base revision.');
+        }
+        snapshots.push(snapshot);
+      }
+      for (const binding of modelTargetBindings(model)) {
+        const current = await streamedTargetRevision(project.root, binding.path, model.directory);
+        if (current !== binding.revision) {
+          throw new AppError('REVISION_CONFLICT', 'A model entry or retained reference changed after the package was reviewed.');
+        }
+      }
+      return snapshots;
     }
     const snapshots = [];
     for (const op of operations) {
@@ -288,12 +541,32 @@ export class WriteCoordinator {
       catch (error) { this.sessions.pause(sessionId); throw error; }
       await this.fault('after-preflight');
       const record: BatchRecord = { version: plan.version, id: randomUUID(), projectId: plan.projectId, projectKey: plan.projectKey, ownerId, planId, planDigest: plan.digest, keyHash, status: 'preparing', operations: plan.operations.map(op => ({ path: op.path, expectedRevision: op.expectedRevision, newRevision: op.newRevision, ...(op.source ? { sourceBytes: op.source.bytes } : {}), phase: 'pending' })), createdAt: this.now(), ...(plan.restoresBatchId ? { restoresBatchId: plan.restoresBatchId } : {}) };
-      if (model) record.directories = checkedModelDirectories(model, plan.operations).map(path => ({ path, phase: 'pending' }));
+      if (model) record.directories = modelCreateDirectories(model, plan.operations).map(path => ({ path, phase: 'pending' }));
+      const validateModelExistingDirectories = async () => {
+        if (!model) return;
+        for (const directory of modelExistingDirectories(model, plan.operations)) {
+          if (await modelDirectoryIdentity(project.root, directory.path) !== directory.identity) {
+            throw new AppError('FILE_CHANGED', 'An existing model directory changed after the package was reviewed.');
+          }
+        }
+      };
       const validateAncestors = async (path: string) => {
+        await validateModelExistingDirectories();
         for (const directory of record.directories ?? []) {
           if (path.startsWith(`${directory.path}/`) && (!directory.identity
             || await modelDirectoryIdentity(project.root, directory.path) !== directory.identity)) {
             throw new AppError('FILE_CHANGED', 'A model directory no longer matches the directory created by this batch.');
+          }
+        }
+      };
+      const validateModelTargetBindings = async () => {
+        if (!model) return;
+        for (const binding of modelTargetBindings(model)) {
+          authorize();
+          await validateAncestors(binding.path);
+          const current = await streamedTargetRevision(project.root, binding.path, model.directory);
+          if (current !== binding.revision) {
+            throw new AppError('REVISION_CONFLICT', 'A model entry or retained reference changed before the dependency could be published.');
           }
         }
       };
@@ -340,6 +613,25 @@ export class WriteCoordinator {
         for (let index = 0; index < plan.operations.length; index++) {
           authorize();
           const op = plan.operations[index];
+          await validateModelTargetBindings();
+          const validateModelDependencies = async () => {
+            if (model && op.path === model.modelPath) {
+              const dependencies = model.dependencies
+                ?? plan.operations.slice(0, index).map(dependency => ({
+                  path: dependency.path,
+                  revision: dependency.newRevision,
+                }));
+              for (const dependency of dependencies) {
+                authorize();
+                await validateAncestors(dependency.path);
+                const current = await streamedTargetRevision(project.root, dependency.path, model.directory);
+                if (current !== dependency.revision) {
+                  throw new AppError('REVISION_CONFLICT', 'A model dependency changed before the entry could be published.');
+                }
+              }
+              await validateAncestors(op.path);
+            }
+          };
           if (op.source) {
             if (model) await validateAncestors(op.path);
             await assertCreateTargetAbsent(project.root, op.path);
@@ -361,20 +653,23 @@ export class WriteCoordinator {
               }), record.id, index, authorize, model && {
                 directory: model.directory,
                 validateBeforePublish: async () => {
-                  await validateAncestors(op.path);
-                  if (op.path !== model.modelPath) return;
-                  for (const dependency of plan.operations.slice(0, -1)) {
-                    authorize();
-                    await validateAncestors(dependency.path);
-                    if (await streamedTargetRevision(project.root, dependency.path, model.directory) !== dependency.newRevision) {
-                      throw new AppError('REVISION_CONFLICT', 'A model dependency changed before the entry could be published.');
-                    }
-                  }
-                  await validateAncestors(op.path);
+                  await validateModelTargetBindings();
+                  await validateModelDependencies();
                 },
               });
           } else {
-            await publishTarget(project.root, op.path, op.expectedRevision, Buffer.from(op.data, 'base64'), record.id, index, authorize);
+            await validateModelDependencies();
+            await validateModelTargetBindings();
+            await publishTarget(
+              project.root,
+              op.path,
+              op.expectedRevision,
+              Buffer.from(op.data, 'base64'),
+              record.id,
+              index,
+              authorize,
+              { replaceReferenceableTarget: model !== undefined && op.path === model.modelPath },
+            );
           }
           await this.fault('after-write', index);
           record.operations[index].phase = 'applied';

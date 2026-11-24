@@ -15,9 +15,11 @@ npm run build
 
 按下方[本机配置](#本机配置)登记工程和 MCP。要使用 Creator Skill，把 [`skills/webgal-creator`](../skills/webgal-creator/) 整个目录复制到 `~/.agents/skills/webgal-creator`，在 Codex 中调用 `$webgal-creator`。如果找不到 Skill，重启 Codex。[Codex Skill 安装说明](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills)
 
+编辑已有工程时，将 [webgal-editor](../skills/webgal-editor/) 整个目录复制到同一 skills 目录。需要在场景里编排 Live2D 角色时，再把 [webgal-live2d](../skills/webgal-live2d/) 整个目录复制到所用 Creator 或 Editor 旁边，保留原目录名。两者会在处理模型演出时读取它。普通工程和 Librarian 单独建库均可跳过这一步。
+
 ### 单独安装 Librarian
 
-准备 Codex 和 Python 3.10 或更高版本。如果只管理共享素材库，可以跳过上面的 MCP 构建和 Terre 工程登记。
+普通素材管理与离线查询需要 Python 3.10 或更高版本。首次为 Live2D 建档或刷新模型信息，另需安装 MCP 并登记模型素材目录。
 
 1. 从仓库中把整个 [`skills/webgal-librarian`](../skills/webgal-librarian/) 目录复制到 `~/.agents/skills/webgal-librarian`，保留其中的 `scripts/`、`references/` 和 `agents/`。
 2. 在 PowerShell 运行 `python --version` 确认版本。在新 Codex 对话中调用 `$webgal-librarian`，并提供素材库路径。可直接复制 [README 的接管示例](../README.md#用-librarian-管理共享素材库)。
@@ -81,7 +83,9 @@ CLI 通过 stdio（标准输入输出）与客户端通信。直接在终端启�
 | `scene_read` | UTF-8 原文、原始字节 SHA-256、BOM 和换行信息 |
 | `scene_validate` | 解析磁盘或候选文本，检查静态引用；不执行脚本、不下载 URL |
 | `asset_list` | 列出背景、立绘、BGM、语音、视频、动画目录的既有文件元数据 |
-| `live2d_model_inspect` | 检查 `.model3.json` 的结构和本机文件依赖，列出动作组和表情名 |
+| `live2d_model_discover` | 在登记的素材目录内查找模型入口，比较候选及缺失的基础文件 |
+| `live2d_model_inspect` | 按入口内容检查 Cubism 2 或标准 `.model3.json` 的依赖，区分动作组、组内成员和表情 |
+| `live2d_model_entries` | 按动作、表情或依赖分页，返回原名、登记状态、播放文件和内容指纹 |
 | `game_config_read` | `game/config.txt` 原文、版本及解析摘要 |
 | `preview_get_url` | 返回配置对应的官方预览 URL；不打开浏览器、不遥控、不证明游戏已运行 |
 
@@ -177,9 +181,31 @@ node dist/cli.js --config webgal-mcp.local.json --state-root "<absolute-private-
 
 ## Live2D 模型与演出
 
-1. **检查模型。** 工程内模型用 `live2d_model_inspect({ location: { kind: "project", projectId: "my-game", modelPath: "hero/hero.model3.json" } })`，路径相对于 `game/figure`。导入前在 `sources` 登记素材目录，再用 `{ kind: "source", sourceId: "assets", modelPath: "hero/hero.model3.json" }` 作为 `location`。返回的依赖路径相对于模型目录，`valid` 表示结构和依赖文件通过静态检查。查看 `motions` 的组名和组内文件，以及 `expressions` 的名称和文件。
-2. **审阅导入。** `live2d_import_plan({ projectId: "my-game", sourceId: "assets", modelPath: "hero/hero.model3.json", targetDirectory: "hero" })` 返回草案。核对 `paths`、文件大小和 SHA-256、`bundleRevision` 与 `blockingIssues`。可用 `extraPaths` 指定相对于模型目录的额外模型、图片或音频文件。模型包最多 32 个文件、32 MiB，单文件最多 16 MiB。目标在现有 `game/figure` 下，目录名必须尚未被占用。
-3. **交接后应用。** 在 Terre 保存并关闭工程的全部编辑页，明确交接草案中的精确 `paths`。再次调用导入计划，补上 `sessionId` 和 `expectedBundleRevision`。审阅正式计划后另行确认应用，再调用 `change_apply` 和 `write_session_end`。应用模型包在 Windows 上需要安装在标准位置的 PowerShell 7，在 Linux 上需要 Python 3 与支持 `renameat2(RENAME_NOREPLACE)` 的内核/文件系统，用于以不覆盖方式发布目录并保留已占用的名称。模型入口最后发布。中断时用 `recovery_inspect` 查看 `modelBundle`、`directories`、各文件的 `diskState` 和暂存信息。若某个目录留下暂存，目录记录的 `stagingPath` 会列出它相对于工程根目录的路径。重试前先确认现场，再选一个新目标目录并重新交接。
-4. **编排演出。** 用 `scene_read` 找到确切对白和立绘上下文，根据模型检查结果选动作组和表情。用 `scene_validate` 检查完整候选文本，再用 `change_plan` 审阅该段修改。动作和表情更新时保留原立绘 ID、站位和其他必要参数。用户交接、确认应用并交回后，在 Terre 重新打开场景并预览。
+同一个角色的每套模型各用自己的入口。把动作和表情分开选，即使它们同名。以 WebGAL 4.6.7 为例，`-motion=Tap` 播放组内第一个成员；要选另一个成员，在游戏副本登记单独的动作组，并保留该成员的声音。磁盘上额外的表情文件也要先登记，随后才能用登记名调用。两类登记都应出现在可审阅的导入草案中。
+
+1. **发现和检查模型。** 用 `live2d_model_discover` 提供 `location` 与可选的相对 `directory`，按 `modelPath` 排序分页。候选会区分 Cubism 2 `model.json`、Cubism 3 `.model3.json` 和无法确认的入口。再用返回的 `modelPath/rootPath` 调用 `live2d_model_inspect`。`rootPath` 是依赖解析边界，可保留素材包内跨目录引用，同时拒绝越界读取。返回依赖路径相对模型目录，`counts` 是完整计数，数组超过报告上限时用 `live2d_model_entries` 取全量。
+2. **分页取可调用项。** `live2d_model_entries` 接受 `kind`（`motion`、`expression`、`dependency`）、`prefix`、`offset`、`limit` 和 `expectedRevision`。前页的 `revision` 可传给下一页防止入口清单变化。动作项含 `motionGroup/motionIndex/sound`，表情项区分 `registered/unregistered`。每个动作或表情文件都有 SHA-256 `fingerprint`，manifest 没变但动作文件被替换时仍能触发已登记播放结果的复核；依赖项指纹为 `null`。源码桥接可调用 `snapshotLive2dCatalog(config, location)` 一次取得 `{ report, items }`。
+3. **审阅导入。** `live2d_import_plan({ projectId: "my-game", sourceId: "assets", modelPath: "hero/hero.model3.json", targetDirectory: "hero" })` 返回草案。核对 `paths`、文件大小和 SHA-256、`bundleRevision` 与 `blockingIssues`。可用 `extraPaths` 指定相对于模型目录的额外模型、图片或音频文件。模型包最多 32 个文件、32 MiB，单文件最多 16 MiB。目标在现有 `game/figure` 下。curated 草案把 `.chara`、`.mtn_exp` 等点号目录转换为 `_chara`、`_mtn_exp`，同步重写 Moc、贴图、动作、表情和 Sound 引用，并用 `gameEntry` 给出入口创建/更新的前后 revision、动作组成员、表情和资源引用变化。discover 识别出的自定义 JSON 入口会在同一相对目录归一为 `model.json`；标准 `model.json` 和 `.model3.json` 名称保持原样。正式计划内部保存来源路径到游戏副本路径的 `sourceMappings`。
+4. **交接后应用。** 在 Terre 保存并关闭工程的全部编辑页，明确交接草案中的精确 `paths`。再次调用导入计划，补上 `sessionId` 和 `expectedBundleRevision`。审阅正式计划后另行确认应用，再调用 `change_apply` 和 `write_session_end`。应用模型包在 Windows 上需要安装在标准位置的 PowerShell 7，在 Linux 上需要 Python 3 与支持 `renameat2(RENAME_NOREPLACE)` 的内核/文件系统，用于以不覆盖方式发布目录并保留已占用的名称。模型入口最后发布。中断时用 `recovery_inspect` 查看 `modelBundle`、`directories`、各文件的 `diskState` 和暂存信息。若某个目录留下暂存，目录记录的 `stagingPath` 会列出它相对于工程根目录的路径。重试前先确认现场；依赖批次已部分写入时，用原 `bundleRevision`、原批次 `batchIndex` 和失败计划 `previousPlanId` 重新审阅并续跑。
+5. **编排演出。** 用 `scene_read` 找到确切对白和立绘上下文，根据模型检查结果选动作组和表情。用 `scene_validate` 检查完整候选文本，再用 `change_plan` 审阅该段修改。动作和表情更新时保留原立绘 ID、站位和其他必要参数。用户交接、确认应用并交回后，在 Terre 重新打开场景并预览。
 
 `scene_validate` 返回 `live2dIssues`，`project_scan` 在每个场景下列出同一组诊断，包含行号、模型入口和可安全显示的依赖或参数。静态分析使用 WebGAL 4.6.7 的动作组和表情名称规则。实际渲染、动作混合和导出由 Terre 验证。Cubism 运行库由使用者按 [WebGAL 文档](https://docs.openwebgal.com/live2D.html) 配置。
+
+### 按剧情导入和补项
+
+例如，素材源 `models` 下有 `haru/runtime/haru.model3.json`。下面的只读草案选择 Tap 的第二个成员，同时给已有文件 Smile 补登记。先用检查结果核对实际文件名；`memberIndex` 从 0 开始。
+
+```json
+{
+  "projectId": "my-game",
+  "sourceId": "models",
+  "rootPath": "haru",
+  "modelPath": "haru/runtime/haru.model3.json",
+  "targetDirectory": "haru-stage",
+  "mode": "curated",
+  "motions": [{"name": "Tap", "memberIndex": 1, "outputName": "Tap_2"}],
+  "expressions": [{"name": "Smile", "file": "expressions/Smile.exp3.json"}]
+}
+```
+
+后续补动作沿用相同的 `targetDirectory`。审阅资源清单、游戏入口的新增登记以及返回的实际调用名。需要分批时，每批分别审阅、交接、应用并读回；最终入口发布成功后才把模型写进场景。例如需要边鞠躬边哭时，在同一个 `changeFigure` 上设置 `-motion` 和 `-expression`。表情单独变化时保留相同的模型路径、figure ID 和槽位，只指定这次要换的表情。

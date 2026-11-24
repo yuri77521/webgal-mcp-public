@@ -14,7 +14,7 @@ python "$tool" search "$lib" --type 立绘 --group 小仓朝日 --require 服装
 
 每项需求一次命令，把近义词和备用词合在一起；返回结果含原样路径和表情描述，有合适项即选。仅用户主动要求查看更多时翻页。不要先列素材目录、读 INDEX 或分册、遍历偏移量、循环调用 search/show。缺少依据才按路径 show 最终入围项。最多两轮（含脚本自动备用查询），不足则报告缺口。按[项目交接约定](../../webgal-librarian/references/project-handoff.md)复用或绑定库根并记下选材。来源与授权各自只在用户明确要求时读取。
 
-When project assets are within scope, use `asset_list` for the relevant pages. Inspect shortlisted unfamiliar images and sounds for actual fit. A file name, a starter asset, or a successful reference check alone does not establish suitability or usage rights. Use `live2d_model_inspect` before promising existing model, motion, or expression names.
+When project assets are within scope, use `asset_list` for the relevant pages. Inspect shortlisted unfamiliar images and sounds for actual fit. A file name, a starter asset, or a successful reference check alone does not establish suitability or usage rights.
 
 Before building executable WebGAL candidates, give the user a compact grouped summary of what is usable, what is missing or unsuitable, and the resulting effect on the game. If the inventory covers the approved story, summarize reuse and proceed. When a gap lacks a decision, offer one bundled choice for all unresolved items:
 
@@ -32,8 +32,6 @@ Keep the reviewed story revision, grouped asset decision, coverage, and any acce
 
 Prepare new files in the registered asset source outside the game. Inspect exact file hashes with `asset_source_inspect` and include the revision in the proposed `import_asset` operation in `change_plan`. Use new target names and known existing parent directories. Reuse verified identical assets by reference. Plan licensed cover/background imports and supported title/config fields together with `edit_config` based on `project_inspect.configRevision`. The draft references staged assets; game imports take effect only through `change_apply`, after the Terre handoff, formal plan, and separate user approval in that order. Run the [batch preflight](sync-and-handoff.md#batch-preflight) before planning and validate each accepted batch.
 
-For Live2D, prefer an existing verified model. Inspect motion groups and expressions, and retain the figure ID, position, scale, and other necessary transforms when updating a cue. Start with individually calibrated upper-body framing and verify two characters, one character, expression changes, and re-entry in a real preview when the fixture has models. When no usable Live2D model exists, offer suitable static portraits and expression variants. Use narration for an unsupported action when the approved portrayal covers that choice. A model that is installed can still require a compatible runtime. Handling a new model bundle is outside the first release path.
-
 Plan music, one-shot effects, and sustained ambience separately. For a sustained cue, record where it starts, what continues across scenes, and where it stops or fades. Where an in-engine fade is unavailable, use a tested, compatible staged fade asset if needed. Inspect audio transitions with a real browser and use playback and source levels to judge mixing. A playback probe alone cannot establish acceptable listening quality. If a cue needs a fallback, handle silence or narration at the asset readiness gate.
 
 ## Presentation quality review
@@ -41,6 +39,7 @@ Plan music, one-shot effects, and sustained ambience separately. For a sustained
 Review presentation against the approved Markdown and asset decisions during the [saved Chrome check](acceptance.md#chrome-playthrough-and-evidence). Reuse any screenshots and playback observations from the selected scenes or cues. Report effects outside the sampled scope as unverified when relevant. Inspect presentation separately from the static scan.
 
 - Check each important character's presence, portrait, and script-required expression changes. Distinguish static variants from effects that were deferred.
+- Check that the speaker label clears when narration resumes.
 - Identify any background or cover that remains a placeholder. Compare character art and backgrounds for fit in style, scale, and lighting. Explicitly report observed mismatches at delivery, including when the individual images were already accepted for a test build.
 - Check whether music, ambience, and sounds suit their moments. Identify missing cues, and when continuous audio is in the selected scope, check the relevant transition, loop, or stop and fade. Say which audio aspects were actually observed.
 - Compare the story's key staging directions with the result. Note effects left unfinished, simplified into narration, or skipped.

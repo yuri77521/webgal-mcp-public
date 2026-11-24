@@ -1,0 +1,3 @@
+interface:
+  display_name: "WebGAL Live2D"
+  short_description: "Stage Live2D figures, motions and expressions in WebGAL"

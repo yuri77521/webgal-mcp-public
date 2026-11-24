@@ -246,7 +246,7 @@ export async function analyzeScene(
     const endLine = sentence.endLine + 1;
     const rawContent = rawSentenceContent(sceneLines, sentence);
     if (checkLive2d && !live2dTruncated && sentence.commandRaw === 'changeFigure'
-      && rawContent.toLowerCase().endsWith('.model3.json')) {
+      && rawContent.toLowerCase().endsWith('.json')) {
       const issues = await checkLive2d({
         rawPath: rawContent,
         dynamicPath: hasDynamicToken(rawContent),

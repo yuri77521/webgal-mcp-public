@@ -10,8 +10,38 @@ export type PlannedChange = { path: string; newRevision: string } & (
   { expectedRevision: string | null; data: string; source?: never }
   | { expectedRevision: null; source: StreamedAssetSource; data?: never }
 );
-export type WriteRecordVersion = 1 | 2 | 3;
-export interface ModelBundle { directory: string; modelPath: string }
+export type WriteRecordVersion = 1 | 2 | 3 | 4;
+export interface ModelDirectoryExpectation {
+  path: string;
+  state: 'create' | 'existing';
+  identity?: string;
+}
+export interface ModelSourceMapping {
+  targetRelativePath: string;
+  sourceRelativePath: string;
+}
+export interface ModelDependencyRevision {
+  path: string;
+  revision: string;
+}
+export interface ModelBundle {
+  directory: string;
+  modelPath: string;
+  mode?: 'create' | 'update';
+  directories?: ModelDirectoryExpectation[];
+  sourceId?: string;
+  sourceRootPath?: string;
+  bundleRevision?: string;
+  batchIndex?: number;
+  batchCount?: number;
+  skippedBatchIndices?: number[];
+  previousPlanId?: string;
+  entryIncluded?: boolean;
+  sourceMappings?: ModelSourceMapping[];
+  dependencies?: ModelDependencyRevision[];
+  targetEntryRevision?: string;
+  targetReferences?: ModelDependencyRevision[];
+}
 export interface ModelBundleDirectory { path: string; phase: 'pending' | 'intent' | 'created'; identity?: string }
 export interface WritePlan { version: WriteRecordVersion; id: string; projectId: string; projectKey: string; ownerId: string; sessionId: string; createdAt: number; expiresAt: number; operations: PlannedChange[]; digest: string; restoresBatchId?: string; sources?: SourceRevision[]; modelBundle?: ModelBundle }
 export interface OperationRecord { path: string; expectedRevision: string | null; newRevision: string; backup?: string; sourceBytes?: number; phase: 'pending' | 'intent' | 'applied'; }

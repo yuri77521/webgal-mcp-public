@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,8 +22,8 @@ function snapshot(text: string) {
     revision: createHash('sha256').update(raw).digest('hex'), bytes: raw.length };
 }
 
-function invoke(scene: object, input: object) {
-  return spawnSync(process.execPath, [helper], {
+function invoke(scene: object, input: object, script = helper) {
+  return spawnSync(process.execPath, [script], {
     input: JSON.stringify({ projectId, scene, ...input }), encoding: 'utf8'
   });
 }
@@ -42,6 +42,51 @@ function stationEdit(scene: object) {
 }
 
 describe('standalone Editor', () => {
+  it('edits a static cue with only Editor installed and picks up an optional sibling for a model cue', async () => {
+    const skills = await mkdtemp(path.join(tmpdir(), 'webgal-skills-'));
+    const installed = path.join(skills, 'webgal-editor');
+    const script = path.join(installed, 'scripts/local-edit.mjs');
+    const portrait = 'changeFigure:calm.png -left -next;';
+    const model = 'changeFigure:actor/model.json -right -id=actor -next;';
+    const scene = snapshot([model, portrait, dialogue].join('\n'));
+    const reaction = { mode: 'live2d', firstLine: 3, before: dialogue,
+      figure: { modelPath: 'actor/model.json', slot: 'right', id: 'actor' }, expression: 'Smile' };
+    try {
+      await cp(new URL('../skills/webgal-editor/', import.meta.url), installed, { recursive: true });
+      const edit = invoke(scene, { mode: 'draft', firstLine: 2, before: portrait,
+        after: portrait.replace('calm.png', 'smile.png') }, script);
+      expect(edit.status, edit.stderr).toBe(0);
+      expect(JSON.parse(edit.stdout).afterRevision).toBe(snapshot(scene.text.replace('calm.png', 'smile.png')).revision);
+      const missing = invoke(scene, reaction, script);
+      expect(missing.status).toBe(1);
+      expect(missing.stderr).toContain('Install webgal-live2d');
+      await cp(new URL('../skills/webgal-live2d/', import.meta.url), path.join(skills, 'webgal-live2d'), { recursive: true });
+      const staged = invoke(scene, reaction, script);
+      expect(staged.status, staged.stderr).toBe(0);
+      expect(JSON.parse(staged.stdout).candidateText).toBe([model, portrait,
+        'changeFigure:actor/model.json -id=actor -right -expression=Smile -next;', dialogue].join('\n'));
+    } finally {
+      await rm(skills, { recursive: true, force: true });
+    }
+  });
+
+  it('applies verified Live2D selectors at the chosen beat without replacing the figure or spoken line', () => {
+    const entry = '冬装 爱音/model.json';
+    const intro = `changeFigure:${entry} -left -id=anon -next;`;
+    const scene = snapshot([intro, dialogue, dialogue].join('\r\n'));
+    const input = { mode: 'live2d', firstLine: 3, before: dialogue,
+      figure: { modelPath: entry, slot: 'left', id: 'anon' }, expression: 'wink01' };
+    const edit = run(scene, input);
+    const expected = [intro, dialogue, `changeFigure:${entry} -id=anon -left -expression=wink01 -next;`, dialogue].join('\r\n');
+    expect(edit.candidateText).toBe(expected);
+    expect(edit.afterRevision).toBe(snapshot(expected).revision);
+    expect(run(snapshot(expected), { mode: 'undo', receipt: edit.receipt }).afterRevision).toBe(scene.revision);
+    const combined = run(scene, { ...input, motion: 'sakiko/bow', expression: 'sakiko/cry01' });
+    expect(combined.candidateText).toContain('-motion=sakiko/bow -expression=sakiko/cry01');
+    expect(invoke(scene, { ...input, expression: 'wink01 -right' }).status).toBe(1);
+    expect(invoke(scene, { ...input, before: 'stale' }).status).toBe(1);
+  });
+
   it('inserts music at separate dialogue boundaries and matches the candidate and undo byte for byte', () => {
     const scene = snapshot(original);
     const cues = [

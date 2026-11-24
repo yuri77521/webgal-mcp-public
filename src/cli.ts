@@ -6,6 +6,11 @@ import { AppError, publicError } from './errors.js';
 
 async function main() {
   const args = process.argv.slice(2);
+  if (args.length === 7 && args[0] === '--config' && args[2] === '--catalog-live2d') {
+    const { exportLive2dCatalog } = await import('./live2d/catalog-export.js');
+    await exportLive2dCatalog(await loadConfig(args[1]), args[3], args[4], args[5], args[6]);
+    return;
+  }
   if ((args.length !== 2 && args.length !== 4) || args[0] !== '--config' || (args.length === 4 && (args[2] !== '--state-root' || !args[3]))) throw new AppError('CONFIG_REQUIRED', 'Usage: webgal-mcp --config <local configuration file> [--state-root <private state directory outside projects>]');
   const config = await loadConfig(args[1]);
   const handle = serveStdio(() => createServer(config, { stateRoot: args[3] }));

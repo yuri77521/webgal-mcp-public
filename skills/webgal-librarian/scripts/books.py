@@ -55,9 +55,10 @@ class Book:
         self.keys = set(self.rows)
         self.newline = "\r\n" if any(s.endswith("\r\n") for s in self.lines) else "\n"
 
-    def append(self, key, kind):
-        name = Path(key).stem
-        values = (name, kind, f"{name}（{Path(key).suffix[1:].upper()}）", "", UNKNOWN, UNKNOWN)
+    def append(self, key, kind, name=None, description=None, tags=""):
+        name = name or Path(key).stem
+        values = (name, kind, description or f"{name}（{Path(key).suffix[1:].upper()}）",
+                  tags, UNKNOWN, UNKNOWN)
         if self.lines and not self.lines[-1].endswith("\n"):
             self.lines.append(self.newline)
         self.lines.extend(line + self.newline for line in
@@ -129,9 +130,9 @@ def pending_summary(keys):
     return {"待决定": len(keys), "目录数": len(counts), "目录示例": sorted(counts.items())[:5]}
 
 
-def scan(root, loaded):
+def scan(root, loaded, excluded=None):
     existing = {key for book in loaded.values() for key in book.keys}
-    found = discover(root)
+    found = discover(root, excluded)
     added = 0
     pending = []
     changed = set()
@@ -156,6 +157,8 @@ def scan(root, loaded):
 def assign(root, loaded, key, kind, group):
     check_key(key)
     group_name(group)
+    if kind == "Live2D":
+        raise ValueError("Live2D 条目只能由 MCP 检查结果建档")
     if Path(key).suffix.casefold() not in (IMAGES if kind in ("立绘", "背景") else AUDIO):
         raise ValueError("文件格式与指定素材类型不符")
     if (key.split("/")[0].casefold() == CATALOG or ".git" in key.casefold().split("/")

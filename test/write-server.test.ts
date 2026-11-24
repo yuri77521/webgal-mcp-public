@@ -305,6 +305,8 @@ describe('P3 real stdio write server', () => {
       expect(tools.map((tool) => tool.name).sort()).toEqual([
         'asset_list',
         'game_config_read',
+        'live2d_model_discover',
+        'live2d_model_entries',
         'live2d_model_inspect',
         'preview_get_url',
         'project_inspect',
@@ -320,7 +322,7 @@ describe('P3 real stdio write server', () => {
     }
 
     const writeTools = (await client.listTools()).tools.map((tool) => tool.name);
-    expect(writeTools).toHaveLength(21);
+    expect(writeTools).toHaveLength(23);
     expect(writeTools).toEqual(expect.arrayContaining([
       'asset_source_list',
       'asset_source_inspect',
