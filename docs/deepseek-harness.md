@@ -12,17 +12,17 @@
 
 ## 前置环境
 
-1. 准备好 **Windows、Node.js 24、Git、DeepSeek Harness (`dsh`)** 和正在运行的 [WebGAL Terre](https://github.com/OpenWebGAL/WebGAL_Terre/releases)，并准备一个专用测试工程（下文沿用 `my-game` 作为工程 ID）。
+1. 准备好 **Windows 或 Linux、Node.js 24、Git、DeepSeek Harness (`dsh`)** 和正在运行的 [WebGAL Terre](https://github.com/OpenWebGAL/WebGAL_Terre/releases)，并准备一个专用测试工程（下文沿用 `my-game` 作为工程 ID）。
 2. 先按 [README 快速上手](../README.md#1-下载并构建) 完成构建并准备好本机 `webgal-mcp.local.json`：
 
-```powershell
+```bash
 git clone https://github.com/yuri77521/webgal-mcp-public.git
 cd webgal-mcp-public
 npm ci
 npm run build
 ```
 
-如需验证 Live2D 模型整包导入，还需按 [工具参考](tool-reference.md#live2d-模型与演出) 在 Windows 标准位置安装 PowerShell 7（`C:\Program Files\PowerShell\7\pwsh.exe`）。
+如需验证 Live2D 模型整包导入，请按 [工具参考](tool-reference.md#live2d-模型与演出) 在 Windows 标准位置安装 PowerShell 7（`C:\Program Files\PowerShell\7\pwsh.exe`），或在 Linux 上准备好 Python 3（`python3`）与支持 `renameat2(RENAME_NOREPLACE)` 的内核/文件系统。
 
 ## 接入方式
 
@@ -141,7 +141,7 @@ $repo = (Get-Location).Path.Replace('\', '/')
 | 报 `CONFIG_NOT_FOUND` 或 `--state-root` 位置异常 | `dsh` 启动子进程时的 `cwd` 可能与仓库目录不同（尤其开启会话目录相关选项时），相对路径会发生漂移。 | 将 `args` 中的 `dist/cli.js`、`--config` 和 `--state-root` 全部改为 Windows 绝对路径，重启后重试。 |
 | 重启 `dsh`、编辑 `cordis.patch.yml` 热重载或断连重连后，写入报 `HANDOFF_REQUIRED` 或 `SESSION_MISMATCH` | `webgal-mcp` 将写会话绑定在单次 `stdio` 连接上，连接断开或重载会立即撤销旧会话，不允许继承旧写权限。 | 确认 Terre 编辑页仍处于已保存且关闭状态，重新向模型明确交接并生成新计划；若上一批已提交但回执丢失，可直接用 `recovery_inspect` 传入 `projectId` 和 `planId` 查询（无需旧会话）。 |
 | 已经在 `dsh` 里点了“允许工具调用”，为什么仍不能直接写入 | `dsh` 的工具审批只授权客户端发起工具调用，不代表 WebGAL Terre 中未保存的编辑页已经落盘关闭。 | 按流程在 Terre 中手动保存并关闭该工程的全部编辑页，再明确文字回复交接。 |
-| 导入 Live2D 模型包时在精简环境下报 `CREATE_ONLY_UNSUPPORTED` 或 `WRITE_FAILED` | `dsh-mcp-client` 会清洗 `stdio` 子进程继承的环境变量（默认仅移除名称含 `KEY`/`TOKEN`/`SECRET`/`PASSWORD` 的变量及 `DSH_*`，`ProgramFiles`/`SystemRoot` 通常会保留）；Live2D 目录发布需调用 Windows 标准位置的 PowerShell 7（`Program Files\PowerShell\7\pwsh.exe`）。`webgal-mcp` 另在缺少 `ProgramFiles`/`SystemRoot` 时提供防御性默认回退（`C:\Program Files`、`C:\Windows`），若本机安装路径非默认盘符仍需显式传入。 | 确认已安装 PowerShell 7；如系统盘或安装目录非 `C:\`，在 `dsh` 的 `webgal` 配置 `env` 中显式补充 `ProgramFiles` 与 `SystemRoot`，重启后重试。 |
+| 导入 Live2D 模型包时在精简环境下报 `CREATE_ONLY_UNSUPPORTED` 或 `WRITE_FAILED` | `dsh-mcp-client` 会清洗 `stdio` 子进程继承的环境变量（默认仅移除名称含 `KEY`/`TOKEN`/`SECRET`/`PASSWORD` 的变量及 `DSH_*`，`ProgramFiles`/`SystemRoot`/`PATH` 通常会保留）；Windows 需标准位置的 PowerShell 7（`Program Files\PowerShell\7\pwsh.exe`），Linux 需 `python3` 与支持 `renameat2(RENAME_NOREPLACE)` 的内核/文件系统。`webgal-mcp` 已在缺失 `ProgramFiles`/`SystemRoot`（Windows）或 `PATH`（Linux）时提供防御性默认回退。 | Windows 确认已安装 PowerShell 7（非 `C:\` 时在 `env` 中补充 `ProgramFiles`/`SystemRoot`）；Linux 确认已安装 `python3` 且工程所在文件系统支持 `renameat2`（如 ext4/xfs/btrfs/tmpfs），重启后重试。 |
 
 ## 验证范围与真机验收清单
 

@@ -226,6 +226,27 @@ it.each(['directory', 'file'])('preserves a %s whose name is occupied at model d
   });
 });
 
+it.skipIf(process.platform !== 'linux')(
+  'preserves a dangling symlink whose name is occupied at model directory publication on Linux',
+  async () => {
+    const target = join(root, 'game/figure/hero');
+    let originalIdentity: bigint | undefined;
+    const host = await coordinator(async (point, index) => {
+      if (point !== 'before-model-directory-publish' || index !== 0) return;
+      await symlink(join(dir, 'nonexistent-target'), target);
+      originalIdentity = (await lstat(target, { bigint: true })).ino;
+    });
+    const { session, plan } = await reviewed(host);
+    const applied = await host.apply(owner, session.id, plan.planId!, 'occupied-symlink');
+    expect(applied).toMatchObject({ status: 'uncertain', errorCode: 'TARGET_EXISTS' });
+    expect(applied.operations.every(operation => operation.phase === 'pending')).toBe(true);
+    expect(originalIdentity).toBeDefined();
+    const current = await lstat(target, { bigint: true });
+    expect(current.isSymbolicLink()).toBe(true);
+    expect(current.ino).toBe(originalIdentity);
+  },
+);
+
 it('requires the reviewed files at handoff and again at apply', async () => {
   const host = await coordinator();
   const review = await draft();

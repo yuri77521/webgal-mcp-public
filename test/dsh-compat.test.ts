@@ -498,8 +498,8 @@ describe('DeepSeek Harness (dsh) compatibility', () => {
     }
   });
 
-  it('fills safe Windows defaults in directoryPublisherEnv when MCP client scrubs ProgramFiles or SystemRoot', () => {
-    const fromEmpty = directoryPublisherEnv({}, 'C:\\stage', 'C:\\target');
+  it('fills safe platform defaults in directoryPublisherEnv when MCP client scrubs environment variables', () => {
+    const fromEmpty = directoryPublisherEnv({}, 'C:\\stage', 'C:\\target', 'win32');
     expect(fromEmpty.ProgramFiles).toBe('C:\\Program Files');
     expect(fromEmpty.SystemRoot).toBe('C:\\Windows');
     expect(fromEmpty.WGMCP_DIRECTORY_STAGE).toBe('C:\\stage');
@@ -509,6 +509,7 @@ describe('DeepSeek Harness (dsh) compatibility', () => {
       { PROGRAMFILES: 'D:\\Programs', SYSTEMROOT: 'D:\\Windows' },
       'C:\\stage',
       'C:\\target',
+      'win32',
     );
     expect(fromUppercase.PROGRAMFILES).toBe('D:\\Programs');
     expect(fromUppercase.SYSTEMROOT).toBe('D:\\Windows');
@@ -519,9 +520,25 @@ describe('DeepSeek Harness (dsh) compatibility', () => {
       { ProgramFiles: '  ', ProgramW6432: 'E:\\Program Files', WINDIR: 'E:\\Windows' },
       'C:\\stage',
       'C:\\target',
+      'win32',
     );
     expect(fromFallbacks.ProgramFiles).toBe('E:\\Program Files');
     expect(fromFallbacks.SystemRoot).toBe('E:\\Windows');
+
+    const linuxEmpty = directoryPublisherEnv({}, '/tmp/stage', '/tmp/target', 'linux');
+    expect(linuxEmpty.PATH).toBe('/usr/local/bin:/usr/bin:/bin');
+    expect(linuxEmpty.WGMCP_DIRECTORY_STAGE).toBe('/tmp/stage');
+    expect(linuxEmpty.WGMCP_DIRECTORY_TARGET).toBe('/tmp/target');
+    expect(linuxEmpty).not.toHaveProperty('ProgramFiles');
+    expect(linuxEmpty).not.toHaveProperty('SystemRoot');
+
+    const linuxCustom = directoryPublisherEnv(
+      { PATH: '/opt/python/bin:/usr/bin' },
+      '/tmp/stage',
+      '/tmp/target',
+      'linux',
+    );
+    expect(linuxCustom.PATH).toBe('/opt/python/bin:/usr/bin');
   });
 
   it('revokes write sessions on client reconnect/reload while preserving planId lookup via recovery_inspect', async () => {

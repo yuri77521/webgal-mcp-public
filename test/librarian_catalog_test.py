@@ -95,7 +95,7 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(self.catalog("stats")["缺失"], 0)
 
     def test_output_budget_and_growth(self):
-        folder = "背景/" + "很长的目录名" * 23 + "/" + "另一个目录" * 23
+        folder = "背景/" + "/".join(["很长的目录名" * 11] * 4)
         keys = [f"{folder}/雨景{i}.png" for i in range(12)]
         for key in keys:
             self.media(key)

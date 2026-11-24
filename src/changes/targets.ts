@@ -785,52 +785,115 @@ function envValueCaseInsensitive(env: NodeJS.ProcessEnv, name: string): string |
   return undefined;
 }
 
+type DirectoryPublisher =
+  | { kind: 'win32'; command: string }
+  | { kind: 'linux'; command: string };
+
+const LINUX_RENAME_NOREPLACE_SCRIPT = [
+  'import ctypes, errno, os, sys',
+  'libc = ctypes.CDLL(None, use_errno=True)',
+  'fn = getattr(libc, "renameat2", None)',
+  'if fn is None:',
+  '    sys.exit(64)',
+  'fn.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]',
+  'fn.restype = ctypes.c_int',
+  'src = os.fsencode(os.environ["WGMCP_DIRECTORY_STAGE"])',
+  'dst = os.fsencode(os.environ["WGMCP_DIRECTORY_TARGET"])',
+  'if fn(-100, src, -100, dst, 1) == 0:',
+  '    sys.exit(0)',
+  'err = ctypes.get_errno()',
+  'if err in (errno.ENOSYS, errno.EINVAL, errno.EOPNOTSUPP, errno.EXDEV):',
+  '    sys.exit(64)',
+  'sys.exit(65 if err == errno.EEXIST else 66)',
+].join('\n');
+
+function execExitCode(error: unknown): number | undefined {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'number') {
+      return code;
+    }
+  }
+  return undefined;
+}
+
 export function directoryPublisherEnv(
   baseEnv: NodeJS.ProcessEnv,
   staged: string,
   target: string,
+  platform: NodeJS.Platform = process.platform,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...baseEnv };
-  if (!envValueCaseInsensitive(env, 'ProgramFiles')) {
-    env.ProgramFiles = envValueCaseInsensitive(env, 'ProgramW6432') ?? 'C:\\Program Files';
-  }
-  if (!envValueCaseInsensitive(env, 'SystemRoot')) {
-    env.SystemRoot = envValueCaseInsensitive(env, 'WINDIR') ?? 'C:\\Windows';
+  if (platform === 'win32') {
+    if (!envValueCaseInsensitive(env, 'ProgramFiles')) {
+      env.ProgramFiles = envValueCaseInsensitive(env, 'ProgramW6432') ?? 'C:\\Program Files';
+    }
+    if (!envValueCaseInsensitive(env, 'SystemRoot')) {
+      env.SystemRoot = envValueCaseInsensitive(env, 'WINDIR') ?? 'C:\\Windows';
+    }
+  } else if (platform === 'linux') {
+    if (!env.PATH || env.PATH.trim() === '') {
+      env.PATH = '/usr/local/bin:/usr/bin:/bin';
+    }
   }
   env.WGMCP_DIRECTORY_STAGE = staged;
   env.WGMCP_DIRECTORY_TARGET = target;
   return env;
 }
 
-function directoryPublisher(env: NodeJS.ProcessEnv = process.env): string {
-  if (process.platform !== 'win32') {
-    fail('CREATE_ONLY_UNSUPPORTED', 'Publishing a model directory requires Windows and PowerShell 7.');
+function directoryPublisher(env: NodeJS.ProcessEnv = process.env): DirectoryPublisher {
+  if (process.platform === 'win32') {
+    const programFiles = envValueCaseInsensitive(env, 'ProgramFiles')
+      ?? envValueCaseInsensitive(env, 'ProgramW6432')
+      ?? 'C:\\Program Files';
+    return { kind: 'win32', command: path.join(programFiles, 'PowerShell', '7', 'pwsh.exe') };
   }
-  const programFiles = envValueCaseInsensitive(env, 'ProgramFiles')
-    ?? envValueCaseInsensitive(env, 'ProgramW6432')
-    ?? 'C:\\Program Files';
-  return path.join(programFiles, 'PowerShell', '7', 'pwsh.exe');
+  if (process.platform === 'linux') {
+    return { kind: 'linux', command: 'python3' };
+  }
+  fail(
+    'CREATE_ONLY_UNSUPPORTED',
+    'Publishing a model directory requires Windows with PowerShell 7 or Linux with Python 3 (renameat2).',
+  );
 }
 
 async function publishModelDirectory(
-  publisher: string,
+  publisher: DirectoryPublisher,
   staged: string,
   context: TargetContext,
 ): Promise<void> {
-  // Directory.Move on Windows refuses an occupied name, including a regular file.
-  // Node's rename uses a replace flag. Keep paths out of the PowerShell command text.
+  // Windows uses Directory.Move; Linux uses renameat2(RENAME_NOREPLACE) via python3.
+  // Both refuse an occupied name (empty dir, non-empty dir, file, or symlink), unlike POSIX rename(2)
+  // and Node's fs.rename. Keep paths out of the command text via environment variables.
+  const args = publisher.kind === 'win32'
+    ? [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+        '$ErrorActionPreference = "Stop"; [System.IO.Directory]::Move($env:WGMCP_DIRECTORY_STAGE, $env:WGMCP_DIRECTORY_TARGET)',
+      ]
+    : ['-I', '-c', LINUX_RENAME_NOREPLACE_SCRIPT];
   try {
-    await execFileAsync(publisher, [
-      '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
-      '$ErrorActionPreference = "Stop"; [System.IO.Directory]::Move($env:WGMCP_DIRECTORY_STAGE, $env:WGMCP_DIRECTORY_TARGET)',
-    ], {
-      env: directoryPublisherEnv(process.env, staged, context.target),
+    await execFileAsync(publisher.command, args, {
+      env: directoryPublisherEnv(process.env, staged, context.target, publisher.kind),
       windowsHide: true,
       timeout: 30_000,
     });
   } catch (error) {
     await assertTargetAbsentInContext(context);
-    if (isNodeError(error, ['ENOENT', 'EACCES', 'EPERM'])) {
+    if (publisher.kind === 'linux') {
+      const exitCode = execExitCode(error);
+      if (exitCode === 65) {
+        fail('TARGET_EXISTS', 'The create-only target already exists.');
+      }
+      if (exitCode === 64) {
+        fail(
+          'CREATE_ONLY_UNSUPPORTED',
+          'Atomic create-only directory publication (renameat2 RENAME_NOREPLACE) is unavailable on this Linux environment.',
+        );
+      }
+      if (isNodeError(error, ['ENOENT', 'EACCES', 'EPERM'])) {
+        fail('CREATE_ONLY_UNSUPPORTED', 'Install Python 3 on Linux to import model directories.');
+      }
+    } else if (isNodeError(error, ['ENOENT', 'EACCES', 'EPERM'])) {
       fail('CREATE_ONLY_UNSUPPORTED', 'Install PowerShell 7 in its standard Windows location to import model directories.');
     }
     fail('WRITE_FAILED', 'The staged model directory could not be published.');
