@@ -138,6 +138,7 @@ $repo = (Get-Location).Path.Replace('\', '/')
 
 | 看到什么 | 检查哪里 | 怎么重试 |
 | --- | --- | --- |
+| 升级后，20 MiB 的背景图仍报 `FILE_TOO_LARGE`，或 Creator 在生成草案前提示超限 | 核对当前 DSH profile 中 `webgal` 实际启动的 `dist/cli.js` 路径，以及已安装 Creator 的 `references/sync-and-handoff.md`。 | 重新构建并连接新版 MCP，同步已安装的 Creator 指引。用已登记来源中的图片调用 `asset_source_inspect`，再用 `change_plan` 生成导入草案即可验证。[素材导入限制](tool-reference.md#素材导入限制) |
 | `dsh` 启动成功，但看不到任何 `mcp__webgal__*` 工具 | `dsh-mcp-client` 默认 `failOnStartupError: false`，首次连接失败不会阻断启动。检查 `cordis.patch.yml` 是否包含顶层 `- insert:`、是否运行过 `npm run build`，并用 `dsh --profile web --dump-config` 核对条目是否生效。 | 临时在配置中设置 `failOnStartupError: true` 查看具体报错；修正配置后重启 `dsh`，再调用 `mcp__webgal__webgal_status`。 |
 | 报错找不到 `node` 或提示 Node 版本不兼容 | `webgal-mcp` 要求 Node.js 24（`>=24.0.0 <25`）；部分 Windows 环境下子进程 `PATH` 未包含 Node 24。 | 在命令行运行 `where.exe node` 与 `node -v` 核对版本，将配置中的 `command` 改为 Node 24 的 `node.exe` 绝对路径后重试。 |
 | 报 `CONFIG_NOT_FOUND` 或 `--state-root` 位置异常 | `dsh` 启动子进程时的 `cwd` 可能与仓库目录不同（尤其开启会话目录相关选项时），相对路径会发生漂移。 | 将 `args` 中的 `dist/cli.js`、`--config` 和 `--state-root` 全部改为 Windows 绝对路径，重启后重试。 |
