@@ -17,6 +17,8 @@ npm run build
 
 编辑已有工程时，将 [webgal-editor](../skills/webgal-editor/) 整个目录复制到同一 skills 目录。需要在场景里编排 Live2D 角色时，再把 [webgal-live2d](../skills/webgal-live2d/) 整个目录复制到所用 Creator 或 Editor 旁边，保留原目录名。两者会在处理模型演出时读取它。普通工程和 Librarian 单独建库均可跳过这一步。
 
+需要共用演出参考时，将整个 [webgal-staging](../skills/webgal-staging/) 目录复制到所用 Creator 或 Editor 旁边，保留 `references/`。两端通过同级路径读取对应主题。单独咨询构图与时序时也可以直接调用 `$webgal-staging`。
+
 ### 单独安装 Librarian
 
 普通素材管理与离线查询需要 Python 3.10 或更高版本。首次为 Live2D 建档或刷新模型信息，另需安装 MCP 并登记模型素材目录。

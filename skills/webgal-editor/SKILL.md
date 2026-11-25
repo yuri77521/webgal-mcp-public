@@ -7,7 +7,23 @@ description: Locate and edit dialogue, narration and staging in saved scenes of 
 
 Use the registered webgal MCP and Node.js 24. The source of truth is the current project's saved scene. A hand-authored game needs no Creator installation, story.md or script-map.json. Creator’s reviewed Markdown, casting notes and synchronization map are read-only to Editor. A draft goes to stdout and the chat. If intermediate files are needed, create a fresh private temp directory for this edit. Never reuse an existing review, story or notes file as scratch space.
 
+只问做法或验收标准时，采用题面已给的台词、对象和状态。信息足够就给建议与可观察的预期，跳过工作区搜索。请求定位实际片段、交付修改或检查实际画面时，再按对应流程读取保存场景、候选或预览。
+
+## 修改正文时
+
+只拆本次目标，以保存场景和本次认可的替换文字为准，范围外逐字节保留。按语义、说话者和阅读节拍把正文切成可手动翻过的页。中文旁白可从每页 30–50 字、对白 15–40 字起步，超过 60 字优先检查；按实际模板、字号、头像和混排宽度调整。保留可读字号、原标点、引号和空格。每页明确说话者；无名旁白清名，心声沿用稿中约定。普通阅读页保留手动停页，避免用 `-next`、`-continue` 自动推进或用 `-concat` 把分开的页重新接长。
+
+从最终候选 TXT 用工程对应的 WebGAL parser 读回每页正文，按顺序拼回认可文本，另核对姓名。只排除已约定的结构分隔；出现首个差异就定位修正。遇到转义、注音、样式或变量时分别核对脚本含义和实际显示。Chrome 抽查最长页、最宽混排页及对白转旁白处（可重合）：关 AUTO，等末字完全显现，亲看正常游戏截图中首末字、姓名框与控制列，再手动翻页。回想和 `scene_validate` 的命令摘要不能替代这两项检查。
+
+拆带语音或条件的句子时，核对每页是否还在同一分支。整句录音只触发一次；确认翻页时不会无意截断。若已有分句录音，按对应文本绑定。听完整句才发生的反应留在末页之后。只改音乐或立绘时保留原文分页。
+
 ## Locate and preview
+
+在场普通 PNG 移动后换表情，本入口下方的移动和差分规则足以生成脚本：已知活动 ID、槽位、触发页和两张对齐的图片时直接编写。若素材留边、遮挡或相机取景仍有具体疑问，再读[立绘与构图](../webgal-staging/references/figure-and-composition.md)。硬切时需核实退场参数的登记时机，可直读[转场与时序](../webgal-staging/references/transitions-and-timing.md)。
+
+从入口能确定命令、对象、节拍和预期画面时，直接输出脚本。需要补资料时只取解决缺口的一页，按入口目录折叠相对路径中的 `..`；等正文返回后复用，同一实际文件只请求一次。其他演出可查已安装的[演出索引](../webgal-staging/SKILL.md)。普通改字与基础分页留在本入口。
+
+返工时沿用每一轮的「已试写法 → 实际画面」及本次可改范围，再选下一个不同的修法。交接时在对话或已有的私有验收记录中带上这几行，让新会话也能看到；保持游戏脚本纯净。
 
 When the requested cue introduces a Live2D model or changes the performance of a figure whose saved entry is a Live2D model, load the optional sibling [webgal-live2d](../webgal-live2d/SKILL.md). For a PNG expression swap, dialogue or music edit, continue here even when other models are present.
 
@@ -15,17 +31,11 @@ For background music, use `bgm:track.mp3 -next;` to start or switch tracks and `
 
 For start/switch/stop insertions, use the local helper's `mode: "bgm"` with the original `scene_read` snapshot, `projectId`, and ordered `cues`. Each cue takes `line` (the 1-based line to insert before), `before` (that exact saved line) and `track` (filename or `"none"`). It returns the ready-to-send sparse `operation`, `candidateText`, `afterRevision` and receipt. Send its exact `operation` to `change_plan` and its exact `candidateText` to `scene_validate`. Require the plan's operation `afterRevision` to equal the helper's `afterRevision` before handing off. A mismatch means the planned scene differs from the checked one; rebuild the draft from the helper output. For edits to existing music commands or custom options use the ordinary draft helper and make the same revision comparison.
 
-For a sequence of entrances, reactions and exits, read the dialogue in order and map each requested change to the **gap between two spoken lines**. Decide who the audience should see, and with what expression, while each line is on screen. An arriving speaker enters just before their arrival line, after any line about waiting for them. For a reaction *after hearing* something, keep the original expression through the entire triggering line and insert the swap between that line and the reaction. Someone announcing a departure stays visible for their farewell, exits immediately afterwards, remains absent during the waiting lines, and re-enters just before their return line.
+For a sequence of entrances, reactions and exits, trace the active ID, slot and transforms along the saved path, including earlier changes in the candidate. Place cues in dialogue gaps. Keep the original expression through the complete triggering line; keep the departing actor visible through the farewell, absent during the wait and present again just before the return line. Clear named figures by active ID and anonymous figures by slot. For insertion-only work, removing the added cues must reproduce the original scene bytes.
 
-Track each figure's ID and slot through the whole candidate, including newly inserted entrances. Remove a named figure with `changeFigure:none -id=guest -next;` using its actual active ID. A slot-only clear addresses the built-in slot and can leave a named figure visible. For an anonymous slot figure, clear its active slot. Re-enter using the intended image, slot and identity. Check the actual plan's before/after text: removing only the new cues must reproduce the original scene bytes, including dialogue terminators. Verify that the exit targets the same figure as its entrance and that there is a spoken beat when that figure is absent.
+For an expression-only edit to an active static image in 4.6.7, prefer `changeFigureDiff` with its active ID or anonymous slot. Keep the pose and costume consistent. When a full `changeFigure` replacement is needed, repeat the slot and explicit ID and carry over effective position, scale and framing. Keep implicit center implicit. Compare a fixed body point before and after the swap, and check the other figures stay in place.
 
-For an expression change, keep the actor at the same on-screen position. Trace the active figure at that beat, including any entrance or move added earlier in the same draft. When swapping a portrait image with `changeFigure`, repeat the actor's active slot flag (such as `-left` or `-right`) **and** its explicit `-id`, if present. An ID identifies the figure; omitting its slot on the replacement can place the new image at center. Keep an implicit center slot implicit. For example, after `changeFigure:calm.png -right -id=guest -next;`, a matching swap is `changeFigure:smile.png -right -id=guest -next;`.
-
-A new image can reset the actor's transform even with the same ID and slot. After a move, carry the resolved destination and any other active framing values into the replacement's `-transform`. For example, if the actor reached x = -240 within the right slot, use `changeFigure:smile.png -right -id=guest -transform={"position":{"x":-240}} -duration=0 -next;` for an immediate swap. Use the last effective position on the current path. For an expression-only cue, keep the actor, pose, outfit and framing consistent. During playback, compare a fixed point on the actor's body immediately before and after the swap, and check that the other figures stay visible in place.
-
-For spatial directions such as approach, back away, 靠近 or 退开, draft an on-screen **figure movement**. Resolve the mover and the other visible figure from the saved scene. Read their active `changeFigure` IDs, left/center/right slots and intervening transforms, including exits or replacements. Target the mover's explicit ID when present, otherwise its `fig-left`, `fig-center` or `fig-right` slot. Keep the other figure still.
-
-Choose the beat from the dialogue. With no specified line, a natural default is just before the mover's next reply once both are visible. Let the preceding line establish the starting positions. For an approach, choose a destination partway across the current horizontal gap, leaving the silhouettes distinguishable. Account for both slot origins and any existing offsets: the command's `position.x` is the destination offset from the **mover's own origin**. Increase it when approaching someone to the right, decrease it for someone to the left. Use a short visible duration (typically 180–300 ms for “quickly”). Choose the distance and timing yourself when the staging is clear. Clarify if identities, positions or the intended branch cannot be resolved.
+For an approach or retreat, move the specified actor and leave the other still. Target its ID or active `fig-left`, `fig-center` or `fig-right`. Let a line establish both positions; a natural approach can precede the mover's next reply. Account for both slot origins and offsets. Choose a destination relative to the mover's own origin that leaves both silhouettes readable. A quick move may take about 180–300 ms; adjust to the beat.
 
 Use the helper's `move` mode for a horizontal move. Pass `firstLine`, `before` (the exact unchanged anchor line), `target`, numeric destination `x`, and `duration` in milliseconds along with the saved snapshot. It inserts one WebGAL `setTransform` cue and retains the original line, its voice/options and all other dialogue. Pass its returned operation directly to the draft plan. Check the diff adds only the movement cue. In a playback check, compare the two figures before and after the cue and check the original dialogue sequence.
 

@@ -35,3 +35,14 @@ say:（但願這是同一班車。） -clear;
 - Give the linear path an explicit entry, scene transitions, and an ending. Check that paths and target commands exist. Treat semicolons and other script syntax inside source dialogue as data. Verify the generated representation with the installed parser and Chrome instead of assuming a universal escape sequence.
 - Treat the approved hash as an exact byte snapshot, including line endings. If only formatting changed, demonstrate that the semantic content is unchanged and bind a new byte snapshot to the existing approval. If the equivalence is uncertain or meaning changed, show affected passages for a fresh approval.
 - Keep generated script candidates in the private staging area. Fixing a WebGAL conversion or presentation detail after approval must stay within the approved script and authorization, and any changed formal plan requires fresh application approval.
+
+## 一个 fragment 对应多页
+
+例如 F012 是小禾的一段完整对白。她先报告发现，停顿后才说出担心。认可的正文为「车票背后写着旧站名，我去问过站长，他说那一班夜车昨晚确实停过。可是末班车进站的时候，月台上的钟明明已经停了。」
+
+```text
+小禾:「车票背后写着旧站名，我去问过站长，他说那一班夜车昨晚确实停过。;
+小禾:可是末班车进站的时候，月台上的钟明明已经停了。」;
+```
+
+两页共用 F012。在原有映射的 `webgal` 块内保存两条完整命令。开引号只在首页，闭引号只在末页；姓名栏各自显示“小禾”。取回两页解析后的正文相接，应逐字得到该段认可文本。若有整句语音或反应，在对应页绑定一次；核实中途翻页的播放效果，以及听者在最后一个字之后才反应。

@@ -24,6 +24,8 @@ npm run build
 
 如需验证 Live2D 模型整包导入，请按 [工具参考](tool-reference.md#live2d-模型与演出) 在 Windows 标准位置安装 PowerShell 7（`C:\Program Files\PowerShell\7\pwsh.exe`），或在 Linux 上准备好 Python 3（`python3`）与支持 `renameat2(RENAME_NOREPLACE)` 的内核/文件系统。
 
+需要演出参考时，将 [webgal-staging](../skills/webgal-staging/) 整个目录与所用 Creator 或 Editor 一起放在项目的 `.agents/skills/` 下，保留目录名。DSH 从当前任务所需的参考页读取；普通文本编辑可单独安装 Editor。
+
 ## 接入方式
 
 下面提供两种配置方式，二选一即可。**推荐先以只读模式跑通，确认 `webgal_status` 正常后再开启 `--state-root`。**
