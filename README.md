@@ -38,6 +38,8 @@
 
 使用 DSH手动安装时，可通过 `cordis.patch.yml` 配置 `webgal` MCP，先以只读模式连接测试工程。[DSH 接入指南](docs/deepseek-harness.md)
 
+导入背景图、立绘、BGM、语音或视频时，单个二进制素材最多 **100 MiB**，每批流式导入的素材合计最多 **128 MiB**。Live2D 模型入口 JSON 最多 1 MiB。[素材导入限制](docs/tool-reference.md#素材导入限制)
+
 ## 用 Creator Skill 把文章做成短篇
 
 > 请用 webgal-creator Skill 把这篇文章改成一部短篇视觉小说。先给我看剧本，我确认后再选背景、立绘和音乐。
