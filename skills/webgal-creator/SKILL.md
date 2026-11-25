@@ -9,6 +9,18 @@ Use the author's language, names, key events, ending, and dialogue style. Work w
 
 **新文章的第一轮只交付剧本。** 写好、展示 Markdown 并请用户审核，到此结束本轮。即使已绑定素材库、已有选材记录或用户预先说了选角，也要等用户在看过本次剧本后明确回复确认。素材查询与制作记录的交接方法在第 3 步按需读取。
 
+只讨论演出草案时，以用户已给出的剧本节拍、素材状态和预期画面作答。题面足以选定做法时，直接给草案与观察点，跳过工作区搜索和工程定位。需要生成工程候选时，再按下列制作流程核实工程与素材。
+
+原版 4.6.7 的常规硬切（普通 PNG、无自定义转场）可以直接编排：在各图片首次入场的 `changeFigure` 上登记 `-exitDuration=0`。室外末页手动翻过后按活动 ID 移除，再用 `changeBg` 把背景进、退场都设为零。回场时重新以原 ID、预定槽位和图片入场。入场句被冻结或有额外动画时，再查[转场与时序](../webgal-staging/references/transitions-and-timing.md)的完整配方与限制。
+
+从入口能确定命令、对象、节拍和预期画面时，直接输出脚本。需要补资料时只取解决缺口的一页，按入口目录折叠相对路径中的 `..`；等正文返回后复用，同一实际文件只请求一次。复杂构图、时序或裁切可查已安装的[演出索引](../webgal-staging/SKILL.md)。普通正文按本入口分页。
+
+返工时沿用每一轮的「已试写法 → 实际画面」及本次可改范围，再选下一个不同的修法。交接时在对话或已有的私有验收记录中带上这几行，让新会话也能看到；保持游戏脚本纯净。
+
+**正文分页。** 保真委托以用户原文为准，获准改编以本次认可稿为准。一个 fragment 可以对应连续多页，保留原 ID 和完整命令块，听完才有的反应放在最后一页之后。按语义、说话者和阅读节拍把正文切成可手动翻过的页。中文旁白可从每页 30–50 字、对白 15–40 字起步，超过 60 字优先检查；按实际模板、字号、头像和混排宽度调整。保留可读字号、原标点、引号和空格。每页明确说话者；无名旁白清名，心声沿用稿中约定。普通阅读页保留手动停页，避免用 `-next`、`-continue` 自动推进或用 `-concat` 把分开的页重新接长。
+
+用 MCP 安装自带的 `webgal-parser` 解析最终候选 TXT，按页拼回 `say` 的正文，逐字比对认可文本，姓名另核。只排除约定的结构分隔，定位首个差异；转义、注音、样式和变量还要核对显示含义。`scene_validate` 只给命令摘要。若本次是离线草案且已有验收者负责复核，交付同一份候选并标明待验，省去重复查找工具或上网查语法。实际验收在 Chrome 关 AUTO，等末字显完，亲看最长页、最宽混排页和对白转旁白处的正常截图（可重合），核对首末字、姓名框、控制列，再手动翻页。回想只用于定位。
+
 1. **Identify the project.** Use `project_list`, `webgal_status`, and `project_inspect`. Confirm the intended project, readable files, verified Terre mapping, and write-tool availability before planning any game write. Keep working on the Markdown in read-only mode if those prerequisites are missing. Use a dedicated project for tests.
 2. **Deliver the Markdown first.** Draft `story.md` with stable scene and fragment IDs. Ask together about choices that affect the story, character depiction, cost, asset rights, or publishing scope. Show the user the actual Markdown for review. Follow [script format](references/script-format.md). Record their creative approval against the SHA‑256 of the reviewed file bytes. Reread and hash before preparing executable candidates or applying. Re-review affected passages when the content changes.
 3. **Resolve asset readiness after script approval.** For a shared library, run the sibling Librarian as described in [assets and staging](references/assets-and-staging.md); this also applies when only Creator was invoked. List the approved story's backgrounds, portraits and expressions, music, ambience, and effects. In the first message asking about sources, show each asset's use and mark it required or optional. Let the user choose what to provide and what to select from `res` item by item if both sources are available. Confirm permitted sources before searching, preparing assets, or delegating. An exclusive source such as `res` bounds every material choice. Compare the list with verified, suitable, authorized assets before generating WebGAL candidates. When there are unresolved gaps, explain their impact and present automatic preparation, user-supplied assets, and an explicitly simplified placeholder version in one grouped question. Honor any existing decision within its scope and start authorized automatic preparation when suitable tools are available. Keep the gate open until every planned cue is ready or its disclosed fallback is explicitly authorized. Script approval and write approval serve separate purposes and do not resolve asset gaps.

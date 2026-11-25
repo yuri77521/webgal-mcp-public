@@ -36,6 +36,8 @@
 
 需要在游戏里安排 Live2D 角色出场、动作或表情时，再给 Creator 或 Editor 加装 [webgal-live2d](skills/webgal-live2d/SKILL.md)。普通立绘、对白和音乐编辑可直接使用基础 Skill。
 
+需要设计人物构图、过场，或排查正常画面中的字幕裁切时，可在 Creator 或 Editor 旁加装 [webgal-staging](skills/webgal-staging/SKILL.md)。照常调用 Creator 或 Editor 即可；普通正文分页已包含在两者的基础流程中。
+
 使用 DSH手动安装时，可通过 `cordis.patch.yml` 配置 `webgal` MCP，先以只读模式连接测试工程。[DSH 接入指南](docs/deepseek-harness.md)
 
 导入背景图、立绘、BGM、语音或视频时，单个二进制素材最多 **100 MiB**，每批流式导入的素材合计最多 **128 MiB**。Live2D 模型入口 JSON 最多 1 MiB。[素材导入限制](docs/tool-reference.md#素材导入限制)
