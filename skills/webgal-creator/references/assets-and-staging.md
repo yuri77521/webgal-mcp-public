@@ -4,6 +4,8 @@
 
 Once the user approves the Markdown, derive an asset list from that exact story revision. Cover backgrounds and cover art, important characters' portraits and expressions, BGM, ambience, one-shot sounds, and visual effects that affect staging. For each item, state what it is, where or how it will be used, and whether it is required or optional. A cue may be intentionally absent when the story calls for it.
 
+把剧本已标出的反应和回场用到的表情一并列入素材需求。普通 PNG 优先选同服装、同姿势且留边对齐的差分；使用 Live2D 时核对当前模型已登记的表情。缺少合适表情时，按本节的素材缺口流程说明影响和可用备选。叙事明确要求的暂时退场按演出记录执行。
+
 Before looking for assets or starting related subagents, confirm the permitted sources. Ask about generation or external search only if relevant to an unresolved need or requested by the user. Put the asset list in the first message asking about sources. Invite the user to mark which items they will provide and which may be selected from `res` when both are available. Keep this as one grouped request. Use any source choices the user already made for the items they cover. With an exclusive root such as `res`, keep selection, reads for discovery, and delegated searches inside that root. Check resolved paths and exclude links that lead outside. Keep derivatives in authorized staging and derive them only from permitted assets when the user allows processing. If the allowed source lacks an item, explain the gap and offer authorized alternatives or a scope decision.
 
 **共享素材库选材。** 剧本确认前只处理文章和选角。确认后，有库根就直接调用同级 `webgal-librarian/scripts/library.py`。角色分组使用**演员的素材名**，例如「林由小仓朝日出演、服装08、姿态01，平静地说」可直接执行：
@@ -38,7 +40,7 @@ Plan music, one-shot effects, and sustained ambience separately. For a sustained
 
 Review presentation against the approved Markdown and asset decisions during the [saved Chrome check](acceptance.md#chrome-playthrough-and-evidence). Reuse any screenshots and playback observations from the selected scenes or cues. Report effects outside the sampled scope as unverified when relevant. Inspect presentation separately from the static scan.
 
-- Check each important character's presence, portrait, and script-required expression changes. Distinguish static variants from effects that were deferred.
+- 抽查重要角色的在场状态与剧本要求的表情。对本轮涉及的反应、焦点切换和回场，按[画面抽查](../../webgal-staging/references/visual-validation.md#反应与焦点切换)核对触发时机、退场和回场构图，标记未抽查或延后的效果。
 - Check that the speaker label clears when narration resumes.
 - Identify any background or cover that remains a placeholder. Compare character art and backgrounds for fit in style, scale, and lighting. Explicitly report observed mismatches at delivery, including when the individual images were already accepted for a test build.
 - Check whether music, ambience, and sounds suit their moments. Identify missing cues, and when continuous audio is in the selected scope, check the relevant transition, loop, or stop and fade. Say which audio aspects were actually observed.

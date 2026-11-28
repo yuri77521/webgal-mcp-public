@@ -23,6 +23,8 @@ Keep a single UTF‑8 `story.md`, usually one level-two heading per scene. Place
 
 Use readable labels in the author's language for dialogue, narration, thoughts, and staging. Keep messages under a named speaker with a medium marker such as `訊息`. Let the user's Markdown edits stay readable. Use stable IDs to connect each change to a scene, including when the user refers to a quote rather than an ID.
 
+复核长对话与叙事焦点转移的段落。使用已有的 `演出` 段落记录[关键反应与焦点切换](../../webgal-staging/references/figure-and-composition.md#关键反应与叙事焦点)，标明触发句或 fragment、角色、画面变化，以及需要时的回场点。例如「玩家翻过 F012 末页后，来客从平静转为惊讶。进入回忆的第一句时收起来客，回到现场、来客开口前恢复原站位」。
+
 After creative approval and [asset readiness](assets-and-staging.md#asset-readiness-after-script-review), map fragments to complete WebGAL commands, preserving the author's punctuation and voice. Keep timing and effects in staging instructions rather than rewriting the story for engine convenience.
 
 ```text

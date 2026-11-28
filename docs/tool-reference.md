@@ -216,3 +216,28 @@ node dist/cli.js --config webgal-mcp.local.json --state-root "<absolute-private-
 ```
 
 后续补动作沿用相同的 `targetDirectory`。审阅资源清单、游戏入口的新增登记以及返回的实际调用名。需要分批时，每批分别审阅、交接、应用并读回；最终入口发布成功后才把模型写进场景。例如需要边鞠躬边哭时，在同一个 `changeFigure` 上设置 `-motion` 和 `-expression`。表情单独变化时保留相同的模型路径、figure ID 和槽位，只指定这次要换的表情。
+
+
+## Creator 隔离首版
+
+在本机 JSON 配置中加入可选的 firstBuild，并用 --state-root 启动 MCP。下例中的目录应预先存在；templateRoot 指向含 index.html 和 game/scene/start.txt 的可信本机空白 WebGAL 播放模板。root 专用于隔离首版，应与模板、所有素材源、普通写入状态目录和 Terre 工程目录分开。terreGamesRoots 列出本机 Terre 管理的工程库目录；没有 Terre 工程库的测试机可用空数组。
+
+```json
+{
+  "version": 1,
+  "projects": [],
+  "sources": [],
+  "firstBuild": {
+    "root": "C:/WebGAL-FirstBuilds",
+    "templateRoot": "C:/WebGAL/Templates/Blank",
+    "terreGamesRoots": ["C:/WebGAL/TerreGames"]
+  }
+}
+```
+
+- first_build_begin 记录当次用户确认的原话、剧本 SHA‑256、必交场景清单（含 start.txt）、可设置的配置键和必交素材的精确源版本及目标。服务为新工程分配 runId，普通项目工具无法对该 runId 建立 Terre 写入会话。
+- first_build_apply 使用 runId、原剧本 SHA‑256、批次键与普通写入 operations。每批上限仍适用。服务器使用同一个授权范围逐批校验、备份、写入与读回。同一批键和内容可以查回已核对结果。当前授权最长四小时，随连接关闭、取消、暂停或交付结束。
+- first_build_inspect 显示当前制作状态、批次和检查结果，亦可读取及验证单一场景。遇到 FIRST_BUILD_CONFIRMATION_REQUIRED，读取暂停原因及恢复信息，再向用户确认。MCP 重启后可用旧 runId 只读查询已核对和待核对的回执。回执描述当时的结果，继续写入需要新的授权。
+- first_build_preview 从独立快照提供本机 GET/HEAD 播放。完成必交场景和素材后，配合 deliver: true 提交最后核对的 snapshotId。服务核对读回结果，返回同一快照及交付路径，并结束制作授权。播放服务随 MCP 连接关闭。first_build_cancel 撤销本次授权，保留工程、快照和回执。
+
+隔离模式支持普通场景、配置、普通及流式素材写入。Terre 登记、专用 Live2D 模型包导入、恢复覆盖和发布各自使用其原有流程。

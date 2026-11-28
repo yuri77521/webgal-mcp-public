@@ -45,7 +45,12 @@ const configSchema = z
   .object({
     version: z.literal(1),
     projects: z.array(projectSchema).max(MAX_CONFIG_ENTRIES),
-    sources: z.array(sourceSchema).max(MAX_CONFIG_ENTRIES).default([])
+    sources: z.array(sourceSchema).max(MAX_CONFIG_ENTRIES).default([]),
+    firstBuild: z.object({
+      root: rootSchema,
+      templateRoot: rootSchema,
+      terreGamesRoots: z.array(rootSchema).max(MAX_CONFIG_ENTRIES)
+    }).strict().optional()
   })
   .strict();
 
@@ -225,10 +230,18 @@ export async function loadConfig(configPath: string): Promise<AppConfig> {
     });
   }
 
+  const firstBuild = parsed.data.firstBuild;
   return {
     version: 1,
     projects,
-    sources
+    sources,
+    ...(firstBuild ? {
+      firstBuild: {
+        root: await resolveConfiguredRoot(firstBuild.root, configDirectory),
+        templateRoot: await resolveConfiguredRoot(firstBuild.templateRoot, configDirectory),
+        terreGamesRoots: await Promise.all(firstBuild.terreGamesRoots.map(root => resolveConfiguredRoot(root, configDirectory)))
+      }
+    } : {})
   };
 }
 
