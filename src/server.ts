@@ -5,6 +5,7 @@ import { ReadService, ASSET_DIRS } from './service.js';
 import { PROJECT_SCAN_LIMITS } from './project-scan.js';
 import { LIMITS, type AppConfig } from './types.js';
 import { registerWriteTools, type WriteToolOptions } from './write-tools.js';
+import { registerFirstBuildTools } from './first-build/tools.js';
 import { discoverLive2dModels } from './live2d/discover.js';
 import { inspectLive2dModel, listLive2dModelEntries } from './live2d/model.js';
 
@@ -13,7 +14,7 @@ const relativePath = z.string().min(1).max(1024);
 const paging = { cursor: z.string().max(1024).optional(), limit: z.number().int().min(1).max(LIMITS.pageSize).optional() };
 const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 
-export function serverInstructions(writeToolsEnabled: boolean): string {
+export function serverInstructions(writeToolsEnabled: boolean, firstBuildEnabled = false): string {
   if (!writeToolsEnabled) {
     return [
       'webgal-mcp 当前为只读模式（仅开放只读工具）。',
@@ -24,7 +25,10 @@ export function serverInstructions(writeToolsEnabled: boolean): string {
     ].join('\n');
   }
   return [
-    'webgal-mcp 已启用受控写入，所有写入必须严格遵守人工交接流程：',
+    '以下人工交接流程用于本机配置已登记的 Terre 工程：',
+    ...(firstBuildEnabled ? [
+      '- Creator 的隔离首版使用独立的 first_build_* 工具。只有用户审核本次新工程范围并明确授权后才调用 first_build_begin。遇到 FIRST_BUILD_CONFIRMATION_REQUIRED 时暂停并请求用户决定，不复用原授权或改用普通写入工具。'
+    ] : []),
     '1. 排查连接与映射先调用 webgal_status；不要臆测未读取的内容，磁盘读取不代表 Terre 未保存缓冲。',
     '2. 修改或导入前，先用 change_plan 或 live2d_import_plan（不传 sessionId）生成只读草案给用户审阅。',
     '3. 真正写入前，必须等待用户明确回复确认已在 WebGAL Terre 中成功保存并关闭该工程的全部编辑页；随后用用户本次原话调用 write_session_begin，绝不伪造、推断或复用旧回复。',
@@ -36,9 +40,10 @@ export function serverInstructions(writeToolsEnabled: boolean): string {
 export function createServer(config: AppConfig, options: WriteToolOptions = {}) {
   config = structuredClone(config);
   const writeToolsEnabled = Boolean(options.stateRoot);
+  const firstBuildEnabled = writeToolsEnabled && Boolean(config.firstBuild);
   const server = new McpServer(
     { name: 'webgal-mcp', version: '0.3.0' },
-    { instructions: serverInstructions(writeToolsEnabled) },
+    { instructions: serverInstructions(writeToolsEnabled, firstBuildEnabled) },
   );
   const service = new ReadService(config);
   async function result(operation: () => unknown | Promise<unknown>) {
@@ -138,5 +143,6 @@ export function createServer(config: AppConfig, options: WriteToolOptions = {}) 
   server.registerTool('game_config_read', { description: 'Read game/config.txt as original text with a revision and parsed configuration summary.', inputSchema: z.object({ projectId }).strict(), annotations }, args => result(() => service.gameConfig(args.projectId)));
   server.registerTool('preview_get_url', { description: 'Return the configured official Terre preview URL. Does not open a browser, execute preview commands or prove the game runs.', inputSchema: z.object({ projectId }).strict(), annotations }, args => result(() => service.preview(args.projectId)));
   if (writeToolsEnabled) registerWriteTools(server, config, options, result);
+  if (firstBuildEnabled) registerFirstBuildTools(server, config, options, result);
   return server;
 }

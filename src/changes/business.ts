@@ -250,7 +250,7 @@ function assetTarget(kind: BusinessAssetKind, relative: string): string {
   return assertReferenceableTarget('game/' + kind + '/' + validated);
 }
 
-function targetPath(operation: BusinessOperation): string {
+export function targetPath(operation: BusinessOperation): string {
   switch (operation.type) {
     case 'create_scene':
     case 'edit_scene':

@@ -22,7 +22,7 @@ const packageRoot = z.string().max(1024);
 const annotation = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false };
 const readAnnotation = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const edit = z.object({ start: z.number().int().min(0).describe('Zero-based UTF-16 offset in the original decoded text, excluding UTF-8 BOM.'), end: z.number().int().min(0).describe('Exclusive UTF-16 end offset in that same original text.'), text: z.string().max(WRITE_LIMITS.maxFileBytes) }).strict();
-const operation = z.discriminatedUnion('type', [
+export const operation = z.discriminatedUnion('type', [
   z.object({ type: z.literal('create_scene'), path: relative.describe('Relative to game/scene, ending .txt; parent directory must exist.'), text: z.string().max(WRITE_LIMITS.maxFileBytes) }).strict(),
   z.object({ type: z.literal('edit_scene'), path: relative.describe('Relative to game/scene, ending .txt.'), expectedRevision: revision, edits: z.array(edit).min(1).max(256) }).strict(),
   z.object({ type: z.literal('edit_config'), expectedRevision: revision, updates: z.array(z.object({ key: z.string().min(1).max(128), value: z.string().max(WRITE_LIMITS.maxFileBytes) }).strict()).min(1).max(64) }).strict(),
