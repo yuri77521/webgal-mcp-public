@@ -19,6 +19,8 @@ Use the registered webgal MCP and Node.js 24. The source of truth is the current
 
 ## Locate and preview
 
+复核指定场景的立绘演出时，按[关键反应与叙事焦点](../webgal-staging/references/figure-and-composition.md#关键反应与叙事焦点)从保存场景标出触发句、涉及的角色、预期画面和回场点。对进入本次编辑范围的节拍出局部 diff；核对候选的 `scene_validate` 命令与素材引用，预览时按[反应与焦点切换](../webgal-staging/references/visual-validation.md#反应与焦点切换)抽查。
+
 在场普通 PNG 移动后换表情，本入口下方的移动和差分规则足以生成脚本：已知活动 ID、槽位、触发页和两张对齐的图片时直接编写。若素材留边、遮挡或相机取景仍有具体疑问，再读[立绘与构图](../webgal-staging/references/figure-and-composition.md)。硬切时需核实退场参数的登记时机，可直读[转场与时序](../webgal-staging/references/transitions-and-timing.md)。
 
 从入口能确定命令、对象、节拍和预期画面时，直接输出脚本。需要补资料时只取解决缺口的一页，按入口目录折叠相对路径中的 `..`；等正文返回后复用，同一实际文件只请求一次。其他演出可查已安装的[演出索引](../webgal-staging/SKILL.md)。普通改字与基础分页留在本入口。

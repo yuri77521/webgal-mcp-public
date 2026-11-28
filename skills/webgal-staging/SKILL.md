@@ -11,7 +11,7 @@ description: Plan or diagnose visual staging in original WebGAL. Use for shot co
 
 | 当前问题 | 按需阅读 |
 | --- | --- |
-| 角色靠近、换表情跳位、镜头露边、人物与背景光色不合 | [立绘与构图](references/figure-and-composition.md) |
+| 关键反应换表情、焦点转移时收起或恢复立绘、换表情跳位、角色靠近、镜头露边、人物与背景光色不合 | [立绘与构图](references/figure-and-composition.md) |
 | 黑场、换景残留、动画互相打断、手点后时序失常 | [转场与时序](references/transitions-and-timing.md) |
 | 长句在回想里完整，或配音、姓名与分页对不上 | [文字与分页](references/text-and-pagination.md) |
 | 主主题页未覆盖的命令、参数或版本差异会影响做法 | [4.6.7 相容性](references/engine-compatibility.md) |
